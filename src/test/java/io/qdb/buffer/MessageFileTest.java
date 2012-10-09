@@ -4,9 +4,12 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.Random;
+import java.util.zip.CRC32;
+
+import static junit.framework.Assert.assertEquals;
 
 public class MessageFileTest {
 
@@ -30,15 +33,60 @@ public class MessageFileTest {
 
     @Test
     public void testAppend() throws IOException {
-        MessageFile mf = new MessageFile(new File(dir, "append.qdb"));
-        byte[] bytes = "wibble".getBytes("UTF8");
-        mf.append(bytes, 0, bytes.length);
+        File file = new File(dir, "append.qdb");
+        MessageFile mf = new MessageFile(file, 1000);
+
+        long ts0 = System.currentTimeMillis();
+        String key0 = "foo";
+        byte[] payload0 = "piggy".getBytes("UTF8");
+        int length0 = 4/*length*/ + 1/*type*/ + 8/*timestamp*/ + 1/*key len*/ + key0.length() + payload0.length;
+
+        long ts1 = ts0 + 1;
+        String key1 = "foobar";
+        byte[] payload1 = "oink".getBytes("UTF8");
+        int length1 = 4/*length*/ + 1/*type*/ + 8/*timestamp*/ + 1/*key len*/ + key1.length() + payload1.length;
+
+        assertEquals(1004L, mf.append(ts0, key0, ByteBuffer.wrap(payload0)));
+        assertEquals(1004L + length0, mf.append(ts1, key1, ByteBuffer.wrap(payload1)));
+
         mf.close();
+
+        assertEquals(4/*checkpoint*/ + length0 + length1, file.length());
+
+        DataInputStream ins = new DataInputStream(new FileInputStream(file));
+
+        assertEquals(0, ins.readInt()); // checkpoint
+
+        assertEquals(length0, ins.readInt());
+        assertEquals((byte)0xA1, ins.readByte());   // type
+        assertEquals(ts0, ins.readLong());
+        assertEquals(key0.length(), (int)ins.readByte() & 0xFF);
+        assertEquals(key0, readUTF8(ins, key0.length()));
+        assertEquals(new String(payload0, "UTF8"), readUTF8(ins, payload0.length));
+
+        assertEquals(length1, ins.readInt());
+        assertEquals((byte)0xA1, ins.readByte());   // type
+        assertEquals(ts1, ins.readLong());
+        assertEquals(key1.length(), (int)ins.readByte() & 0xFF);
+        assertEquals(key1, readUTF8(ins, key1.length()));
+        assertEquals(new String(payload1, "UTF8"), readUTF8(ins, payload1.length));
     }
 
+    private String readUTF8(InputStream ins, int length) throws IOException {
+        return new String(readBytes(ins, length), "UTF8");
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private byte[] readBytes(InputStream ins, int length) throws IOException {
+        byte[] buf = new byte[length];
+        assertEquals(length, ins.read(buf));
+        return buf;
+    }
+
+    /*
     @Test
     public void testPerformance() throws IOException {
-        MessageFile mf = new MessageFile(new File(dir, "performance.qdb"));
+        MessageFile mf = new MessageFile(new File(dir, "performance.qdb"), 0);
 
         Random rnd = new Random(123);
         byte[] msg = new byte[4096];
@@ -54,5 +102,6 @@ public class MessageFileTest {
         double perSec = numMessages / (ms / 1000.0);
         System.out.println(ms + " ms, " + perSec + " messages per second");
     }
+    */
 
 }

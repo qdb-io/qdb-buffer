@@ -6,60 +6,79 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.zip.CRC32;
 
 /**
- * <p>A bunch of messages all in the same file. Supports detection and recovery from corruption due to server crash
- * and so on. New messages are always appended to the end of the file.<p>
+ * <p>A bunch of messages all in the same file. Supports detection and recovery from corruption due to server crash.
+ * New messages are always appended to the end of the file.<p>
  *
- * <p>Uses a FileChannel with MappedByteBuffer.
- * http://nadeausoftware.com/articles/2008/02/java_tip_how_read_files_quickly</p>
+ * <p>The first 4 bytes of the file hold its length at the last checkpoint. Recovery from a crash is simply a matter
+ * of truncating the file to its last checkpoint length. That might discard some good messages but has the advantage
+ * of being very fast (compared to calculating and checking message CRC values for example). The assumption is that
+ * if the messages are very important they will be written to separate machines.</p>
  *
- * <p>File format:</p>
+ * <p>The remainder of the file consists of records in the following format (all BIG_ENDIAN):</p>
+ *
  * <pre>
- * length: 4 bytes (value: 4 + 1 + 8 + 4 + n)
- * version: 1 byte
+ * length: 4 bytes (value: 4 + 1 + 8 + 1 + m + n)
+ * record type: 1 byte (value always 0xA1 currently)
  * timestamp: 8 bytes
- * crc: 4 bytes
+ * routing key length: 1 byte
+ * routing key UTF8 encoded: m bytes
  * payload: n bytes
  * </pre>
  */
 class MessageFile implements Closeable {
 
     private final File file;
+    private final long baseOffset;
     private RandomAccessFile raf;
     private FileChannel channel;
-    private ByteBuffer headerBuffer;
+    private ByteBuffer header;
     private final ByteBuffer[] srcs = new ByteBuffer[2];
 
-    private static final byte VERSION = (byte)0x42;
-    private static final int HEADER_SIZE = 4 + 1 + 8 + 4;
+    private static final int HEADER_SIZE = 4 + 1 + 8 + 1;
 
-    public MessageFile(File file) throws IOException {
+    private static final byte TYPE_MESSAGE = (byte)0xA1;
+
+    public MessageFile(File file, long baseOffset) throws IOException {
         this.file = file;
+        this.baseOffset = baseOffset;
         raf = new RandomAccessFile(file, "rw");
         channel = raf.getChannel();
-        headerBuffer = ByteBuffer.allocateDirect(HEADER_SIZE);
-        srcs[0] = headerBuffer;
+        header = ByteBuffer.allocateDirect(512);
+        srcs[0] = header;
+
+        if (channel.size() != 0L) {
+        }
     }
 
     /**
-     * Append a message and return its position in the file.
+     * Append a message and return its id (position in the file plus the baseOffset of the file itself).
      */
-    public long append(byte[] buffer, int offset, int length) throws IOException {
-        long id = channel.size();
-        headerBuffer.position(0);
-        headerBuffer.putInt(length + HEADER_SIZE);
-        headerBuffer.put(VERSION);
-        headerBuffer.putLong(System.currentTimeMillis());
-        CRC32 crc32 = new CRC32();
-        crc32.update(buffer, offset, length);
-        headerBuffer.putInt((int)crc32.getValue());
-        headerBuffer.position(0);
-        srcs[1] = ByteBuffer.wrap(buffer, offset, length);
-        channel.position(id);
+    public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
+        byte[] routingKeyBytes = routingKey.getBytes("UTF8");
+        int m = routingKeyBytes.length;
+        if (m > 255) throw new IllegalArgumentException("Routing key length " + m + " > 255 bytes");
+        int length = HEADER_SIZE + m + payload.limit();
+
+        header.clear();
+        int id = (int)channel.size();
+        if (id == 0) {
+            header.putInt(0);   // new file so make space for checkpoint
+            id += 4;
+        } else {
+            channel.position(id);
+        }
+        header.putInt(length);
+        header.put(TYPE_MESSAGE);
+        header.putLong(timestamp);
+        header.put((byte) (m & 0xFF));
+        header.put(routingKeyBytes);
+        header.flip();
+
+        srcs[1] = payload;
         channel.write(srcs);
-        return id;
+        return baseOffset + id;
     }
 
     @Override
