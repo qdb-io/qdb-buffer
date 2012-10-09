@@ -49,9 +49,10 @@ public class MessageFileTest {
         assertEquals(1004L, mf.append(ts0, key0, ByteBuffer.wrap(payload0)));
         assertEquals(1004L + length0, mf.append(ts1, key1, ByteBuffer.wrap(payload1)));
 
+        int expectedLength = 4/*checkpoint*/ + length0 + length1;
+        assertEquals(expectedLength, mf.length());
         mf.close();
-
-        assertEquals(4/*checkpoint*/ + length0 + length1, file.length());
+        assertEquals(expectedLength, file.length());
 
         DataInputStream ins = new DataInputStream(new FileInputStream(file));
 
@@ -70,6 +71,8 @@ public class MessageFileTest {
         assertEquals(key1.length(), (int)ins.readByte() & 0xFF);
         assertEquals(key1, readUTF8(ins, key1.length()));
         assertEquals(new String(payload1, "UTF8"), readUTF8(ins, payload1.length));
+
+        ins.close();
     }
 
     private String readUTF8(InputStream ins, int length) throws IOException {
@@ -81,6 +84,28 @@ public class MessageFileTest {
         byte[] buf = new byte[length];
         assertEquals(length, ins.read(buf));
         return buf;
+    }
+
+    @Test
+    public void testCheckpoint() throws IOException {
+        File file = new File(dir, "checkpoint.qdb");
+        MessageFile mf = new MessageFile(file, 0);
+        mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap("oink".getBytes("UTF8")));
+        mf.checkpoint();
+        mf.close();
+
+        DataInputStream ins = new DataInputStream(new FileInputStream(file));
+        int expectedLength = (int) file.length();
+        assertEquals(expectedLength, ins.readInt());
+        ins.close();
+
+        FileOutputStream out = new FileOutputStream(file, true);
+        out.write("junk".getBytes("UTF8"));
+        out.close();
+
+        assertEquals(expectedLength + 4, file.length());
+        new MessageFile(file, 0).close();
+        assertEquals(expectedLength, file.length());
     }
 
     /*

@@ -40,6 +40,9 @@ class MessageFile implements Closeable {
 
     private static final byte TYPE_MESSAGE = (byte)0xA1;
 
+    /**
+     * Open a new or existing file.
+     */
     public MessageFile(File file, long baseOffset) throws IOException {
         this.file = file;
         this.baseOffset = baseOffset;
@@ -48,7 +51,14 @@ class MessageFile implements Closeable {
         header = ByteBuffer.allocateDirect(512);
         srcs[0] = header;
 
-        if (channel.size() != 0L) {
+        int size = (int)channel.size();
+        if (size != 0L) { // use checkpoint to recover file
+            header.limit(4);
+            int read = channel.read(header);
+            if (read != 4) throw new IOException("File is corrupt [" + file + "]");
+            int expectedSize = header.getInt(0);
+            if (expectedSize > size) throw new IOException("File is corrupt [" + file + "]");
+            else if (expectedSize < size) channel.truncate(expectedSize);   // discard possibly corrupt portion
         }
     }
 
@@ -79,6 +89,25 @@ class MessageFile implements Closeable {
         srcs[1] = payload;
         channel.write(srcs);
         return baseOffset + id;
+    }
+
+    /**
+     * How big is this file in bytes?
+     */
+    public synchronized int length() throws IOException {
+        return (int)channel.size();
+    }
+
+    /**
+     * Sync all changes to disk and write a checkpoint to the file. Note that the checkpoint is not itself synced to
+     * disk. If you want that call checkpoint twice.
+     */
+    public synchronized void checkpoint() throws IOException {
+        channel.force(true);
+        header.clear();
+        header.putInt((int)channel.size());
+        header.flip();
+        channel.position(0).write(header);
     }
 
     @Override
