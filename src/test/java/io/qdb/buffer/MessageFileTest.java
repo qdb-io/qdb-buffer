@@ -1,50 +1,33 @@
 package io.qdb.buffer;
 
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.Random;
-import java.util.zip.CRC32;
 
-import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
 
+@SuppressWarnings("ResultOfMethodCallIgnored")
 public class MessageFileTest {
 
     private static File dir = new File("build/test-data");
 
-    @SuppressWarnings({"ResultOfMethodCallIgnored", "ConstantConditions"})
-    @BeforeClass
-    public static void setup() {
-        dir.mkdir();
-        assert dir.isDirectory();
-        for (File c : dir.listFiles()) nuke(c);
-    }
-
-    @SuppressWarnings("ConstantConditions")
-    private static void nuke(File f) {
-        if (f.isDirectory()) {
-            for (File c : f.listFiles()) nuke(c);
-        }
-        assert f.delete();
-    }
-
     @Test
     public void testAppend() throws IOException {
         File file = new File(dir, "append.qdb");
+        file.delete();
         MessageFile mf = new MessageFile(file, 1000);
 
         long ts0 = System.currentTimeMillis();
         String key0 = "foo";
         byte[] payload0 = "piggy".getBytes("UTF8");
-        int length0 = 4/*length*/ + 1/*type*/ + 8/*timestamp*/ + 1/*key len*/ + key0.length() + payload0.length;
+        int length0 = 1/*type*/ + 8/*timestamp*/ + 2/*key size*/ + 4/* payload size*/ + key0.length() + payload0.length;
 
         long ts1 = ts0 + 1;
         String key1 = "foobar";
         byte[] payload1 = "oink".getBytes("UTF8");
-        int length1 = 4/*length*/ + 1/*type*/ + 8/*timestamp*/ + 1/*key len*/ + key1.length() + payload1.length;
+        int length1 = 1/*type*/ + 8/*timestamp*/ + 2/*key size*/ + 4/* payload size*/ + key1.length() + payload1.length;
 
         assertEquals(1004L, mf.append(ts0, key0, ByteBuffer.wrap(payload0)));
         assertEquals(1004L + length0, mf.append(ts1, key1, ByteBuffer.wrap(payload1)));
@@ -56,19 +39,19 @@ public class MessageFileTest {
 
         DataInputStream ins = new DataInputStream(new FileInputStream(file));
 
-        assertEquals(0, ins.readInt()); // checkpoint
+        assertEquals(expectedLength, ins.readInt()); // checkpoint
 
-        assertEquals(length0, ins.readInt());
         assertEquals((byte)0xA1, ins.readByte());   // type
         assertEquals(ts0, ins.readLong());
-        assertEquals(key0.length(), (int)ins.readByte() & 0xFF);
+        assertEquals(key0.length(), (int)ins.readShort());
+        assertEquals(payload0.length, ins.readInt());
         assertEquals(key0, readUTF8(ins, key0.length()));
         assertEquals(new String(payload0, "UTF8"), readUTF8(ins, payload0.length));
 
-        assertEquals(length1, ins.readInt());
         assertEquals((byte)0xA1, ins.readByte());   // type
         assertEquals(ts1, ins.readLong());
-        assertEquals(key1.length(), (int)ins.readByte() & 0xFF);
+        assertEquals(key1.length(), (int)ins.readShort());
+        assertEquals(payload1.length, ins.readInt());
         assertEquals(key1, readUTF8(ins, key1.length()));
         assertEquals(new String(payload1, "UTF8"), readUTF8(ins, payload1.length));
 
@@ -89,6 +72,7 @@ public class MessageFileTest {
     @Test
     public void testCheckpoint() throws IOException {
         File file = new File(dir, "checkpoint.qdb");
+        file.delete();
         MessageFile mf = new MessageFile(file, 0);
         mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap("oink".getBytes("UTF8")));
         mf.checkpoint();
@@ -106,6 +90,54 @@ public class MessageFileTest {
         assertEquals(expectedLength + 4, file.length());
         new MessageFile(file, 0).close();
         assertEquals(expectedLength, file.length());
+    }
+
+    @Test
+    public void testRead() throws IOException {
+        File file = new File(dir, "read.qdb");
+        file.delete();
+        MessageFile mf = new MessageFile(file, 1000);
+
+        try {
+            mf.cursor(999);     // before start
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException ignore) {
+        }
+
+        assertFalse(mf.cursor(1000).next());    // base offset
+        assertFalse(mf.cursor(1004).next());    // first message id
+
+        try {
+            mf.cursor(1005);    // after end
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException ignore) {
+        }
+
+        long ts0 = System.currentTimeMillis();
+        String key0 = "foo";
+        byte[] payload0 = "piggy".getBytes("UTF8");
+        long id0 = mf.append(ts0, key0, ByteBuffer.wrap(payload0));
+
+        long ts1 = ts0 + 1;
+        String key1 = "foobar";
+        byte[] payload1 = "oink".getBytes("UTF8");
+        long id1 = mf.append(ts1, key1, ByteBuffer.wrap(payload1));
+
+        MessageFile.Cursor i = mf.cursor(1000);
+
+        assertTrue(i.next());
+        assertEquals(id0, i.getId());
+        assertEquals(ts0, i.getTimestamp());
+        assertEquals(key0, i.getRoutingKey());
+        assertArrayEquals(payload0, i.getPayload());
+
+        assertTrue(i.next());
+        assertEquals(id1, i.getId());
+        assertEquals(ts1, i.getTimestamp());
+        assertEquals(key1, i.getRoutingKey());
+        assertArrayEquals(payload1, i.getPayload());
+
+        assertFalse(i.next());
     }
 
     /*
