@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.Random;
 
 import static junit.framework.Assert.*;
 import static org.junit.Assert.assertArrayEquals;
@@ -140,25 +141,42 @@ public class MessageFileTest {
         assertFalse(i.next());
     }
 
-    /*
     @Test
     public void testPerformance() throws IOException {
-        MessageFile mf = new MessageFile(new File(dir, "performance.qdb"), 0);
+        File file = new File(dir, "performance.qdb");
+        file.delete();
+        MessageFile mf = new MessageFile(file, 0);
 
         Random rnd = new Random(123);
         byte[] msg = new byte[4096];
         rnd.nextBytes(msg);
 
-        int numMessages = 100000;
+        int numMessages = 1000000;
         long start = System.currentTimeMillis();
         for (int i = 0; i < numMessages; i++) {
             int sz = rnd.nextInt(msg.length);
-            mf.append(msg, 0, sz);
+            mf.append(System.currentTimeMillis(), "msg" + i, ByteBuffer.wrap(msg, 0, sz));
         }
+        mf.checkpoint();
+        mf.close();
+
         int ms = (int)(System.currentTimeMillis() - start);
         double perSec = numMessages / (ms / 1000.0);
-        System.out.println(ms + " ms, " + perSec + " messages per second");
+        System.out.println("Write " + numMessages + " in " + ms + " ms, " + perSec + " messages per second");
+
+        mf = new MessageFile(file, 0);
+        start = System.currentTimeMillis();
+        int c = 0;
+        for (MessageFile.Cursor i = mf.cursor(0); i.next(); c++) {
+            i.getId();
+            i.getTimestamp();
+            i.getRoutingKey();
+            i.getPayload();
+        }
+
+        ms = (int)(System.currentTimeMillis() - start);
+        perSec = c / (ms / 1000.0);
+        System.out.println("Read " + c + " in " + ms + " ms, " + perSec + " messages per second");
     }
-    */
 
 }
