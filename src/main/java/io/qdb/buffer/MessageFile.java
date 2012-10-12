@@ -6,13 +6,34 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 
 /**
- * <p>A bunch of messages all in the same file. Supports detection and recovery from corruption due to server crash.
- * New messages are always appended to the end of the file. Thread safe.<p>
+ * <p>A bunch of messages all in the same file. Supports fast seek to a message by timestamp and detection and
+ * recovery from corruption due to server crash. New messages are always appended to the end of the file for
+ * performance. Thread safe.</p>
  *
- * <p>The first 4 bytes of the file hold its length at the last checkpoint. Recovery from a crash is simply a matter
- * of truncating the file to its last checkpoint length. That might discard some good messages but has the advantage
- * of being very fast (compared to calculating and checking message CRC values for example). The assumption is that
- * if the messages are very important they will be written to separate machines.</p>
+ * <p>The file header is 4096 bytes long. The fixed part is 16 bytes long and has the following format
+ * (all BIG_ENDIAN):</p>
+ * <pre>
+ * magic: 2 bytes (currently 0xBE01)
+ * reserved: 2 bytes (currently 0x0000)
+ * max file size: 4 bytes
+ * length of file at last checkpoint: 4 bytes
+ * reserved: 4 bytes (currently 0x00000000)
+ * </pre>
+ *
+ * <p>Recovery from a crash is simply a matter of truncating the file to its last checkpoint length. That might
+ * discard some good messages but has the advantage of being very fast (compared to calculating and checking
+ * message CRC values for example). The assumption is that if the messages are very important they will be
+ * written to multiple machines.</p>
+ *
+ * <p>The rest of the file header consists of up to 340 histogram buckets for fast message lookup by timestamp:</p>
+ * <pre>
+ * timestamp in unix time: 4 bytes
+ * first message id (relative to this file): 4 bytes
+ * message count: 4 bytes
+ * </pre>
+ *
+ * <p>The histogram is updated at each checkpoint. Checkpoints are done manually or automatically every max file
+ * size / 340 bytes.</p>
  *
  * <p>The remainder of the file consists of records in the following format (all BIG_ENDIAN):</p>
  *
@@ -50,7 +71,7 @@ class MessageFile implements Closeable {
 
         raf = new RandomAccessFile(file, "rw");
         channel = raf.getChannel();
-        header = ByteBuffer.allocateDirect(2048);
+        header = ByteBuffer.allocateDirect(4096);
         srcs[0] = header;
 
         int size = (int)channel.size();
