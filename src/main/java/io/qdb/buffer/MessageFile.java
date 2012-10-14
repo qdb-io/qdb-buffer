@@ -240,7 +240,7 @@ class MessageFile implements Closeable {
 
     @Override
     public String toString() {
-        return "MessageFile[" + file + "] baseOffset " + firstMessageId + " length " + length;
+        return "MessageFile[" + file + "] firstMessageId " + firstMessageId + " length " + length;
     }
 
     /**
@@ -281,7 +281,7 @@ class MessageFile implements Closeable {
             int len = length();
             if (input.position() >= len) return false;
 
-            id = firstMessageId + input.position();
+            id = firstMessageId + input.position() - FILE_HEADER_SIZE;
 
             byte type = input.readByte();
             if (type != TYPE_MESSAGE) {

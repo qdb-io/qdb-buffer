@@ -112,12 +112,11 @@ public class MessageFileTest {
         assertEquals(expectedLength, file.length());
     }
 
-    /*
     @Test
     public void testRead() throws IOException {
         File file = new File(dir, "read.qdb");
         file.delete();
-        MessageFile mf = new MessageFile(file, 1000);
+        MessageFile mf = new MessageFile(file, 1000, 1000000);
 
         try {
             mf.cursor(999);     // before start
@@ -125,11 +124,10 @@ public class MessageFileTest {
         } catch (IllegalArgumentException ignore) {
         }
 
-        assertFalse(mf.cursor(1000).next());    // base offset
-        assertFalse(mf.cursor(1004).next());    // first message id
+        assertFalse(mf.cursor(1000).next());    // first message id
 
         try {
-            mf.cursor(1005);    // after end
+            mf.cursor(1001);    // after end
             fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException ignore) {
         }
@@ -161,6 +159,7 @@ public class MessageFileTest {
         assertFalse(i.next());
     }
 
+    /*
     @Test
     public void testPerformance() throws IOException {
         File file = new File(dir, "performance.qdb");
