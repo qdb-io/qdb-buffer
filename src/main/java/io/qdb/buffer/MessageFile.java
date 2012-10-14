@@ -78,12 +78,24 @@ class MessageFile implements Closeable {
     private static final Charset UTF8 = Charset.forName("UTF8");
 
     /**
+     * Open an existing file.
+     */
+    @SuppressWarnings("StatementWithEmptyBody")
+    public MessageFile(File file, long firstMessageId) throws IOException {
+        this(file, firstMessageId, -1);
+    }
+
+    /**
      * Open a new or existing file.
      */
     @SuppressWarnings("StatementWithEmptyBody")
     public MessageFile(File file, long firstMessageId, int maxFileSize) throws IOException {
         this.file = file;
         this.firstMessageId = firstMessageId;
+
+        if (maxFileSize < 0 && !file.isFile()) {
+            throw new IllegalArgumentException("File does not exist, is not readable or is not a file [" + file + "]");
+        }
 
         raf = new RandomAccessFile(file, "rw");
         channel = raf.getChannel();

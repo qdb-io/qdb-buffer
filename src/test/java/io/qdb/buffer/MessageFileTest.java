@@ -159,12 +159,11 @@ public class MessageFileTest {
         assertFalse(i.next());
     }
 
-    /*
     @Test
     public void testPerformance() throws IOException {
         File file = new File(dir, "performance.qdb");
         file.delete();
-        MessageFile mf = new MessageFile(file, 0);
+        MessageFile mf = new MessageFile(file, 0, 2100000000);
 
         Random rnd = new Random(123);
         byte[] msg = new byte[4096];
@@ -197,6 +196,5 @@ public class MessageFileTest {
         perSec = c / (ms / 1000.0);
         System.out.println("Read " + c + " in " + ms + " ms, " + perSec + " messages per second");
     }
-    */
 
 }
