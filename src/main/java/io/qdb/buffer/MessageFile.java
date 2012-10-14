@@ -10,7 +10,7 @@ import java.nio.charset.Charset;
  * recovery from corruption due to server crash. New messages are always appended to the end of the file for
  * performance. Thread safe.</p>
  *
- * <p>The file header is 4096 bytes long. The fixed part is 16 bytes long and has the following format
+ * <p>The file header is 4096 bytes long. The fixed part is 16 bytes and has the following format
  * (all BIG_ENDIAN):</p>
  * <pre>
  * magic: 2 bytes (currently 0xBE01)
@@ -49,14 +49,29 @@ import java.nio.charset.Charset;
 class MessageFile implements Closeable {
 
     private final File file;
-    private final long baseOffset;
+    private final long firstMessageId;
+    private final int maxFileSize;
     private final RandomAccessFile raf;
     private final FileChannel channel;
+    private final ByteBuffer fileHeader;
     private final ByteBuffer header;
     private final ByteBuffer[] srcs = new ByteBuffer[2];
 
     private int length;
     private int lastCheckpointLength;
+
+    private final int bytesPerBucket;
+    private int bucketIndex;
+    private int bucketTime;
+    private int bucketMessageId;
+    private int bucketCount;
+
+    private static final int FILE_HEADER_SIZE = 4096;
+    private static final int FILE_HEADER_FIXED_SIZE = 16;
+    private static final int BUCKET_RECORD_SIZE = 12;
+    private static final int MAX_BUCKETS = (FILE_HEADER_SIZE - FILE_HEADER_FIXED_SIZE) / BUCKET_RECORD_SIZE;
+
+    private static final short FILE_MAGIC = (short)0xBE01;
 
     private static final byte TYPE_MESSAGE = (byte)0xA1;
 
@@ -65,54 +80,89 @@ class MessageFile implements Closeable {
     /**
      * Open a new or existing file.
      */
-    public MessageFile(File file, long baseOffset) throws IOException {
+    @SuppressWarnings("StatementWithEmptyBody")
+    public MessageFile(File file, long firstMessageId, int maxFileSize) throws IOException {
         this.file = file;
-        this.baseOffset = baseOffset;
+        this.firstMessageId = firstMessageId;
 
         raf = new RandomAccessFile(file, "rw");
         channel = raf.getChannel();
-        header = ByteBuffer.allocateDirect(4096);
+        fileHeader = ByteBuffer.allocateDirect(FILE_HEADER_SIZE);
+        header = ByteBuffer.allocateDirect(1024);
         srcs[0] = header;
 
         int size = (int)channel.size();
         if (size == 0) {
-            length = 4; // assume checkpoint is in file already
-        } else { // use checkpoint to recover file
-            header.limit(4);
-            int read = channel.read(header);
-            if (read != 4) throw new IOException("Missing checkpoint [" + file + "]");
-            length = header.getInt(0);
+            if (maxFileSize < FILE_HEADER_SIZE) {
+                throw new IllegalArgumentException("Invalid max file size " + maxFileSize);
+            }
+            fileHeader.putShort(FILE_MAGIC);
+            fileHeader.putShort((short)0);
+            fileHeader.putInt(this.maxFileSize = maxFileSize);
+            fileHeader.putInt(length = FILE_HEADER_SIZE);
+            fileHeader.putInt(0);
+            channel.write(fileHeader);
+            bucketIndex = -1;
+        } else {
+            int sz = channel.read(fileHeader);
+            if (sz < FILE_HEADER_SIZE) throw new IOException("File header too short [" + file + "]");
+            fileHeader.flip();
+            if (fileHeader.getShort() != FILE_MAGIC) throw new IOException("Invalid file magic [" + file + "]");
+            fileHeader.position(fileHeader.position() + 2);
+            this.maxFileSize = fileHeader.getInt();
+            if (this.maxFileSize < FILE_HEADER_SIZE) {
+                throw new IOException("Invalid max file size " + this.maxFileSize + " [" + file + "]");
+            }
+            length = fileHeader.getInt();
             if (length > size) {
-                throw new IOException("Checkpoint " + length +" exceeds file size " + size + " [" + file + "]");
+                throw new IOException("Checkpoint " + length + " exceeds file size " + size + " [" + file + "]");
             } else if (length < size) {
                 channel.truncate(length);   // discard possibly corrupt portion
             }
             lastCheckpointLength = length;
+
+            for (bucketIndex = 1; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex++)) != 0; );
+
+            fileHeader.position(bucketPosition(--bucketIndex));
+            bucketTime = fileHeader.getInt();
+            bucketMessageId = fileHeader.getInt();
+            bucketCount = fileHeader.getInt();
         }
+
+        bytesPerBucket = (maxFileSize - FILE_HEADER_SIZE) / MAX_BUCKETS;
     }
 
-    public long getBaseOffset() {
-        return baseOffset;
+    private int bucketPosition(int i) {
+        return FILE_HEADER_FIXED_SIZE + i * BUCKET_RECORD_SIZE;
+    }
+
+    public long getFirstMessageId() {
+        return firstMessageId;
     }
 
     /**
-     * Append a message and return its id (position in the file plus the baseOffset of the file itself).
+     * What ID will the next message appended have, assuming there is space for it?
+     */
+    public long getNextMessageId() {
+        return firstMessageId + length - FILE_HEADER_SIZE;
+    }
+
+    /**
+     * Append a message and return its id (position in the file plus the firstMessageId of the file). Returns
+     * -1 if this file is too full for the message.
      */
     public long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
-        if (routingKey.length() > 255) {
-            throw new IllegalArgumentException("Routing key length " + routingKey.length() + " > 255 characters");
-        }
+        int n = routingKey.length();
+        if (n > 255) throw new IllegalArgumentException("Routing key length " + n + " > 255 characters");
+
+        // this check isn't exact but is close enough
+        if (n + payload.limit() >= maxFileSize) return -1;
+
         byte[] routingKeyBytes = routingKey.getBytes(UTF8);
 
         synchronized (channel) {
             header.clear();
-            int id = (int)channel.size();
-            if (id == 0) {
-                header.putInt(0);   // new file so make space for checkpoint
-                id += 4;
-            } else {
-                channel.position(id);
-            }
+            channel.position(length);
             header.put(TYPE_MESSAGE);
             header.putLong(timestamp);
             header.putShort((short)routingKeyBytes.length);
@@ -122,9 +172,35 @@ class MessageFile implements Closeable {
 
             srcs[1] = payload;
             channel.write(srcs);
+
+            int id = length - FILE_HEADER_SIZE;
             length = (int)channel.position(); // update after write so a partial write won't corrupt file
-            return baseOffset + id;
+
+            // see if we need to start a new histogram bucket
+            if (bucketIndex < 0 || ((id - bucketMessageId >= bytesPerBucket) && bucketIndex < MAX_BUCKETS)) {
+                if (bucketIndex >= 0) {
+                    putBucketDataInFileHeader();
+                    ++bucketIndex;
+                } else {
+                    bucketIndex = 0;
+                }
+                bucketTime = (int)(timestamp / 1000);
+                bucketMessageId = id;
+                bucketCount = 1;
+            } else {
+                ++bucketCount;
+            }
+
+            return firstMessageId + id;
         }
+    }
+
+    private void putBucketDataInFileHeader() {
+        fileHeader.position(bucketPosition(bucketIndex));
+        fileHeader.putInt(bucketTime);
+        fileHeader.putInt(bucketMessageId);
+        fileHeader.putInt(bucketCount);
+        // data will be written at the next checkpoint
     }
 
     /**
@@ -145,10 +221,10 @@ class MessageFile implements Closeable {
             // force all writes to disk before updating checkpoint length so we know all data up to length is good
             channel.force(true);
             if (length != lastCheckpointLength) {
-                header.clear();
-                header.putInt(length);
-                header.flip();
-                channel.position(0).write(header);
+                fileHeader.putInt(8, length);
+                if (bucketIndex >= 0) putBucketDataInFileHeader();
+                fileHeader.position(0);
+                channel.position(0).write(fileHeader);
                 lastCheckpointLength = length;
             }
         }
@@ -164,22 +240,18 @@ class MessageFile implements Closeable {
 
     @Override
     public String toString() {
-        return "MessageFile[" + file + "] baseOffset " + baseOffset + " length " + length;
+        return "MessageFile[" + file + "] baseOffset " + firstMessageId + " length " + length;
     }
 
     /**
-     * Create a cursor reading data from messageId onwards. To read the newest messages appearing in the file
-     * do <code>mf.createCursor(mf.length())</code>. To read from the oldest message do
-     * <code>mf.createCursor(mf.getBaseOffset())</code>.
+     * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
+     * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
      */
     public Cursor cursor(long messageId) throws IOException {
-        messageId -= baseOffset;
-        if (messageId < 0 || messageId > length) {
-            throw new IllegalArgumentException("messageId " + (messageId + baseOffset) + " not in " + this);
+        if (messageId < firstMessageId || messageId > getNextMessageId()) {
+            throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
         }
-        int pos = (int)messageId;
-        if (pos == 0) pos = 4;
-        return new Cursor(pos);
+        return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
     }
 
     /**
@@ -209,7 +281,7 @@ class MessageFile implements Closeable {
             int len = length();
             if (input.position() >= len) return false;
 
-            id = baseOffset + input.position();
+            id = firstMessageId + input.position();
 
             byte type = input.readByte();
             if (type != TYPE_MESSAGE) {
