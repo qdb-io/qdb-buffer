@@ -7,7 +7,9 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 
 import static junit.framework.Assert.*;
+import static junit.framework.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.fail;
 
 @SuppressWarnings("ResultOfMethodCallIgnored")
 public class MessageFileTest {
@@ -51,8 +53,8 @@ public class MessageFileTest {
         assertEquals(expectedLength, ins.readInt());    // checkpoint
         assertEquals(0, ins.readInt());                 // reserved
 
-        assertEquals((int)(ts0 / 1000), ins.readInt()); // bucket time
         assertEquals(0, ins.readInt());                 // bucket first message id (relative to file)
+        assertEquals((int)(ts0 / 1000), ins.readInt()); // bucket time
         assertEquals(2, ins.readInt());                 // bucket count
 
         for (int i = 16 + 12; i < 4096; i++) {
@@ -160,7 +162,111 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testMaxLength() throws IOException {
+        File file = new File(dir, "max-length.qdb");
+        file.delete();
+
+        Random rnd = new Random(456);
+        byte[] msg = new byte[101];
+        rnd.nextBytes(msg);
+
+
+        MessageFile mf = new MessageFile(file, 0, 4096 + 15/*header*/ + 100);
+        long id = mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap(msg, 0, 100));
+        assertEquals(id, 0);
+        mf.close();
+
+        file.delete();
+        mf = new MessageFile(file, 0, 4096 + 15/*header*/ + 100);
+        id = mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap(msg, 0, 101));
+        assertEquals(id, -1);
+        mf.close();
+    }
+
+    @Test
+    public void testHistogramWrite() throws IOException {
+        File file = new File(dir, "histogram-write.qdb");
+        file.delete();
+
+        int maxBuckets = 340;
+
+        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // will be used
+        MessageFile mf = new MessageFile(file, 0, 4096 + 2 * maxBuckets * (100 + 15));
+
+        Random rnd = new Random(123);
+        byte[] msg = new byte[100];
+        rnd.nextBytes(msg);
+
+        long ts = System.currentTimeMillis();
+        int c;
+        for (c = 0; c < 100000; c++) {
+            long id = mf.append(ts + c * 1000, "", ByteBuffer.wrap(msg));
+            if (id < 0) break;
+        }
+        mf.close();
+
+        assertEquals(maxBuckets * 2, c);
+
+        DataInputStream ins = new DataInputStream(new FileInputStream(file));
+        ins.skip(16);
+
+        for (int i = 0; i < maxBuckets; i++) {
+            assertEquals(i * (100 + 15) * 2, ins.readInt());
+            assertEquals(ts/1000 + i * 2, ins.readInt());
+            assertEquals(2, ins.readInt());
+        }
+        ins.close();
+    }
+
+    @Test
+    public void testHistogramRead() throws IOException {
+        File file = new File(dir, "histogram-read.qdb");
+        file.delete();
+
+        int maxBuckets = 340;
+
+        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // will be used
+        MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
+
+        byte[] msg = new byte[100];
+        long ts = System.currentTimeMillis();
+        for (int i = 0; i < maxBuckets * 2; i++) {
+            mf.append(ts + i * 1000, "", ByteBuffer.wrap(msg));
+        }
+
+        for (int i = 0; i < maxBuckets; i++) {
+            MessageFile.Bucket b = mf.getBucket(i);
+            String m = "bucket[" + i + "]";
+            assertEquals(m, 1000 + i * (100 + 15) * 2, b.getFirstMessageId());
+            assertEquals(m, ts/1000 + i * 2, b.getTime());
+            assertEquals(m, 2, b.getCount());
+            assertEquals(m, (100 + 15) * 2, b.getSize());
+        }
+
+        try {
+            mf.getBucket(-1);
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException ignore) {
+        }
+
+        try {
+            mf.getBucket(maxBuckets);
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException ignore) {
+        }
+
+        mf.close();
+    }
+
+    @Test
     public void testPerformance() throws IOException {
+        if (System.getProperty("perf") == null) {
+            System.out.println("Skipping testPerformance, run with -Dperf=true to enable");
+            return;
+        }
+
         File file = new File(dir, "performance.qdb");
         file.delete();
         MessageFile mf = new MessageFile(file, 0, 2100000000);

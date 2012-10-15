@@ -27,8 +27,8 @@ import java.nio.charset.Charset;
  *
  * <p>The rest of the file header consists of up to 340 histogram buckets for fast message lookup by timestamp:</p>
  * <pre>
- * timestamp in unix time: 4 bytes
  * first message id (relative to this file): 4 bytes
+ * timestamp in unix time: 4 bytes
  * message count: 4 bytes
  * </pre>
  *
@@ -74,6 +74,8 @@ class MessageFile implements Closeable {
     private static final short FILE_MAGIC = (short)0xBE01;
 
     private static final byte TYPE_MESSAGE = (byte)0xA1;
+
+    private static final int MESSAGE_HEADER_SIZE = 1 + 8 + 2 + 4;
 
     private static final Charset UTF8 = Charset.forName("UTF8");
 
@@ -136,8 +138,8 @@ class MessageFile implements Closeable {
             for (bucketIndex = 1; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex++)) != 0; );
 
             fileHeader.position(bucketPosition(--bucketIndex));
-            bucketTime = fileHeader.getInt();
             bucketMessageId = fileHeader.getInt();
+            bucketTime = fileHeader.getInt();
             bucketCount = fileHeader.getInt();
         }
 
@@ -167,12 +169,11 @@ class MessageFile implements Closeable {
         int n = routingKey.length();
         if (n > 255) throw new IllegalArgumentException("Routing key length " + n + " > 255 characters");
 
-        // this check isn't exact but is close enough
-        if (n + payload.limit() >= maxFileSize) return -1;
-
         byte[] routingKeyBytes = routingKey.getBytes(UTF8);
 
         synchronized (channel) {
+            if (length + MESSAGE_HEADER_SIZE + routingKeyBytes.length + payload.limit() > maxFileSize) return -1;
+
             header.clear();
             channel.position(length);
             header.put(TYPE_MESSAGE);
@@ -189,15 +190,15 @@ class MessageFile implements Closeable {
             length = (int)channel.position(); // update after write so a partial write won't corrupt file
 
             // see if we need to start a new histogram bucket
-            if (bucketIndex < 0 || ((id - bucketMessageId >= bytesPerBucket) && bucketIndex < MAX_BUCKETS)) {
+            if (bucketIndex < 0 || ((id - bucketMessageId >= bytesPerBucket) && bucketIndex < MAX_BUCKETS - 1)) {
                 if (bucketIndex >= 0) {
                     putBucketDataInFileHeader();
                     ++bucketIndex;
                 } else {
                     bucketIndex = 0;
                 }
-                bucketTime = (int)(timestamp / 1000);
                 bucketMessageId = id;
+                bucketTime = (int)(timestamp / 1000);
                 bucketCount = 1;
             } else {
                 ++bucketCount;
@@ -209,8 +210,8 @@ class MessageFile implements Closeable {
 
     private void putBucketDataInFileHeader() {
         fileHeader.position(bucketPosition(bucketIndex));
-        fileHeader.putInt(bucketTime);
         fileHeader.putInt(bucketMessageId);
+        fileHeader.putInt(bucketTime);
         fileHeader.putInt(bucketCount);
         // data will be written at the next checkpoint
     }
@@ -253,6 +254,77 @@ class MessageFile implements Closeable {
     @Override
     public String toString() {
         return "MessageFile[" + file + "] firstMessageId " + firstMessageId + " length " + length;
+    }
+
+    /**
+     * How many histogram buckets are there?
+     */
+    public int getBucketCount() {
+        synchronized (channel) {
+            return bucketIndex + 1;
+        }
+    }
+
+    /**
+     * Get a copy of the data for the histogram bucket at index.
+     */
+    public Bucket getBucket(int i) {
+        synchronized (channel) {
+            if (i < 0 || i > bucketIndex) {
+                throw new IllegalArgumentException("index " + i + " out of range (0 to " + bucketIndex + ")");
+            }
+            if (i == bucketIndex) {
+                return new Bucket(firstMessageId + bucketMessageId, bucketTime, bucketCount,
+                        (length - FILE_HEADER_SIZE) - bucketMessageId);
+            }
+            fileHeader.position(bucketPosition(i));
+            int id = fileHeader.getInt();
+            return new Bucket(firstMessageId + id, fileHeader.getInt(), fileHeader.getInt(),
+                    (i == bucketIndex - 1 ? bucketMessageId : fileHeader.getInt()) - id);
+        }
+    }
+
+    public static class Bucket {
+
+        private final long firstMessageId;
+        private final int time;
+        private final int count;
+        private final int size;
+
+        public Bucket(long firstMessageId, int time, int count, int size) {
+            this.firstMessageId = firstMessageId;
+            this.time = time;
+            this.count = count;
+            this.size = size;
+        }
+
+        /**
+         * Get the unix time of the first message in the bucket. This is the timestamp of the message / 1000.
+         */
+        public int getTime() {
+            return time;
+        }
+
+        /**
+         * Get the ID of the first message in the bucket.
+         */
+        public long getFirstMessageId() {
+            return firstMessageId;
+        }
+
+        /**
+         * Get the number of messages in the bucket.
+         */
+        public int getCount() {
+            return count;
+        }
+
+        /**
+         * Get the number of bytes of messages in the bucket.
+         */
+        public int getSize() {
+            return size;
+        }
     }
 
     /**
