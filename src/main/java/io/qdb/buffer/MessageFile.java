@@ -352,7 +352,7 @@ class MessageFile implements Closeable {
         private int payloadSize;
 
         public Cursor(int position) {
-            input = new ChannelInput(channel, position);
+            input = new ChannelInput(channel, position, 8192);
         }
 
         /**

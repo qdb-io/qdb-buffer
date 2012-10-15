@@ -16,10 +16,10 @@ class ChannelInput {
 
     private int nextBufferPosition;
 
-    ChannelInput(FileChannel channel, int position) {
+    ChannelInput(FileChannel channel, int position, int bufferSize) {
         this.channel = channel;
         this.nextBufferPosition = position;
-        this.buffer = ByteBuffer.allocateDirect(8192);
+        this.buffer = ByteBuffer.allocateDirect(bufferSize);
         buffer.limit(0);
     }
 
