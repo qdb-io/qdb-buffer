@@ -152,7 +152,7 @@ public class MessageFileTest {
         byte[] payload1 = "oink".getBytes("UTF8");
         long id1 = mf.append(ts1, key1, ByteBuffer.wrap(payload1));
 
-        MessageFile.Cursor i = mf.cursor(1000);
+        MessageCursor i = mf.cursor(1000);
 
         assertTrue(i.next());
         assertEquals(id0, i.getId());
@@ -299,7 +299,7 @@ public class MessageFileTest {
         mf = new MessageFile(file, 0);
         start = System.currentTimeMillis();
         int c = 0;
-        for (MessageFile.Cursor i = mf.cursor(0); i.next(); c++) {
+        for (MessageCursor i = mf.cursor(0); i.next(); c++) {
             i.getId();
             i.getTimestamp();
             i.getRoutingKey();

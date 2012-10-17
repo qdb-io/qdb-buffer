@@ -332,7 +332,7 @@ class MessageFile implements Closeable {
      * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
      * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
      */
-    public Cursor cursor(long messageId) throws IOException {
+    public MessageCursor cursor(long messageId) throws IOException {
         if (messageId < firstMessageId || messageId > getNextMessageId()) {
             throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
         }
@@ -342,7 +342,7 @@ class MessageFile implements Closeable {
     /**
      * Iterates over messages in the file. Not thread safe.
      */
-    public class Cursor {
+    public class Cursor implements MessageCursor {
 
         private final ChannelInput input;
         private final byte[] routingKeyBuf = new byte[1024];

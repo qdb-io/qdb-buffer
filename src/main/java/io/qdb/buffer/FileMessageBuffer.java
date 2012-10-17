@@ -165,4 +165,16 @@ public class FileMessageBuffer implements Closeable {
     public synchronized void close() throws IOException {
         if (current != null) current.close();
     }
+
+    /**
+     * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
+     * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
+    public MessageCursor cursor(long messageId) throws IOException {
+        if (messageId < firstMessageId || messageId > getNextMessageId()) {
+            throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
+        }
+        return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
+    }
+     */
+
 }
