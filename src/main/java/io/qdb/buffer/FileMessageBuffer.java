@@ -1,5 +1,6 @@
 package io.qdb.buffer;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -9,7 +10,7 @@ import java.util.Arrays;
 /**
  * Stores messages on the file system in multiple files in a directory. Thread safe.
  */
-public class FileMessageBuffer {
+public class FileMessageBuffer implements Closeable {
 
     private final File dir;
 
@@ -59,7 +60,7 @@ public class FileMessageBuffer {
             }
             lastFile = n;
             Arrays.sort(files, 0, n);
-            lastFileLength = (int)getFile(lastFile - 1).length() - MessageFile.FILE_HEADER_SIZE;
+            lastFileLength = (int)getFile(lastFile - 1).length();
         }
     }
 
@@ -87,11 +88,13 @@ public class FileMessageBuffer {
     }
 
     /**
-     * How much space is this buffer currently consuming?
+     * How much space is this buffer currently consuming in bytes?
      */
-    public synchronized long getSize() {
-        if (lastFile - firstFile == 0) return 0L;
-        return files[lastFile - 1] - files[firstFile] + (current == null ? lastFileLength : current.length());
+    public synchronized long getLength() {
+        int c = lastFile - firstFile;
+        if (c == 0) return 0L;
+        return  (c - 1) * MessageFile.FILE_HEADER_SIZE +
+                files[lastFile - 1] - files[firstFile] + (current == null ? lastFileLength : current.length());
     }
 
     /**
@@ -148,8 +151,7 @@ public class FileMessageBuffer {
         String name = Long.toHexString(firstMessageId);
         StringBuilder b = new StringBuilder();
         b.append(ZERO_CHARS, 0, ZERO_CHARS.length - name.length()).append(name).append(".qdb");
-        name = b.toString();
-        return new File(dir, name);
+        return new File(dir, b.toString());
     }
 
     private File getFile(int i) {
@@ -159,4 +161,8 @@ public class FileMessageBuffer {
         return toFile(files[i]);
     }
 
+    @Override
+    public synchronized void close() throws IOException {
+        if (current != null) current.close();
+    }
 }

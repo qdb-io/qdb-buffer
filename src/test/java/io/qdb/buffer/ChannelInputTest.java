@@ -1,5 +1,6 @@
 package io.qdb.buffer;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
@@ -15,6 +16,13 @@ import static org.junit.Assert.fail;
 public class ChannelInputTest {
 
     private static File dir = new File("build/test-data");
+
+    @BeforeClass
+    public static void beforeClass() throws IOException {
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            throw new IOException("Unable to create [" + dir + "]");
+        }
+    }
 
     @Test
     public void testRead() throws IOException {

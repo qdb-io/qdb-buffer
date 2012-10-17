@@ -88,8 +88,7 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * Open a new or existing file. The maxFileSize parameter excludes the {@link #FILE_HEADER_SIZE} and is only
-     * used when creating a new file.
+     * Open a new or existing file. The maxFileSize parameter is only used when creating a new file.
      */
     @SuppressWarnings("StatementWithEmptyBody")
     public MessageFile(File file, long firstMessageId, int maxFileSize) throws IOException {
