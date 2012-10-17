@@ -66,7 +66,7 @@ class MessageFile implements Closeable {
     private int bucketMessageId;
     private int bucketCount;
 
-    private static final int FILE_HEADER_SIZE = 4096;
+    public static final int FILE_HEADER_SIZE = 4096;
     private static final int FILE_HEADER_FIXED_SIZE = 16;
     private static final int BUCKET_RECORD_SIZE = 12;
     private static final int MAX_BUCKETS = (FILE_HEADER_SIZE - FILE_HEADER_FIXED_SIZE) / BUCKET_RECORD_SIZE;
@@ -88,7 +88,8 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * Open a new or existing file.
+     * Open a new or existing file. The maxFileSize parameter excludes the {@link #FILE_HEADER_SIZE} and is only
+     * used when creating a new file.
      */
     @SuppressWarnings("StatementWithEmptyBody")
     public MessageFile(File file, long firstMessageId, int maxFileSize) throws IOException {
@@ -219,17 +220,17 @@ class MessageFile implements Closeable {
     /**
      * How big is this file in bytes?
      */
-    public int length() throws IOException {
+    public int length() {
         synchronized (channel) {
             return length;
         }
     }
 
     /**
-     * Sync all changes to disk and write a checkpoint to the file. Note that the checkpoint is not itself synced to
-     * disk. If you want that call checkpoint twice.
+     * Sync all changes to disk and write a checkpoint to the file. Note that the checkpoint is itself synced to
+     * disk only if force is true.
      */
-    public void checkpoint() throws IOException {
+    public void checkpoint(boolean force) throws IOException {
         synchronized (channel) {
             // force all writes to disk before updating checkpoint length so we know all data up to length is good
             channel.force(true);
@@ -239,6 +240,7 @@ class MessageFile implements Closeable {
                 fileHeader.position(0);
                 channel.position(0).write(fileHeader);
                 lastCheckpointLength = length;
+                if (force) channel.force(true);
             }
         }
     }
@@ -246,7 +248,7 @@ class MessageFile implements Closeable {
     @Override
     public void close() throws IOException {
         synchronized (channel) {
-            checkpoint();
+            checkpoint(true);
             raf.close();
         }
     }

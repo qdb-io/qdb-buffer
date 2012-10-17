@@ -96,7 +96,7 @@ public class MessageFileTest {
         file.delete();
         MessageFile mf = new MessageFile(file, 0, 1000000);
         mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap("oink".getBytes("UTF8")));
-        mf.checkpoint();
+        mf.checkpoint(false);
         mf.close();
 
         DataInputStream ins = new DataInputStream(new FileInputStream(file));
@@ -281,7 +281,7 @@ public class MessageFileTest {
             int sz = rnd.nextInt(msg.length);
             mf.append(System.currentTimeMillis(), "msg" + i, ByteBuffer.wrap(msg, 0, sz));
         }
-        mf.checkpoint();
+        mf.checkpoint(false);
         mf.close();
 
         int ms = (int)(System.currentTimeMillis() - start);
