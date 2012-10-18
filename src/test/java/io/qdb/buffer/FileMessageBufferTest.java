@@ -46,6 +46,22 @@ public class FileMessageBufferTest {
     }
 
     @Test
+    public void testFirstMessageId() throws IOException {
+        File bd = mkdir("firstmsg");
+
+        FileMessageBuffer b = new FileMessageBuffer(bd, 0x1234);
+        long ts = System.currentTimeMillis();
+        assertEquals(0x1234L, append(b, ts, "", 256));
+        b.close();
+
+        expect(bd.list(), "0000000000001234.qdb");
+
+        b = new FileMessageBuffer(bd);
+        assertEquals(0x1334L, append(b, ts, "", 256));
+        b.close();
+    }
+
+    @Test
     public void testOpenAndRead() throws IOException {
         File bd = mkdir("read");
 

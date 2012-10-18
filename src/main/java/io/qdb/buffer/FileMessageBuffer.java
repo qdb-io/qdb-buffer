@@ -32,6 +32,10 @@ public class FileMessageBuffer implements Closeable {
     };
 
     public FileMessageBuffer(File dir) throws IOException {
+        this(dir, 0L);
+    }
+
+    public FileMessageBuffer(File dir, long firstMessageId) throws IOException {
         if (!dir.exists()) {
             if (!dir.mkdir()) {
                 throw new IOException("Directory [" + dir + "] does not exist and could not be created");
@@ -61,6 +65,8 @@ public class FileMessageBuffer implements Closeable {
             lastFile = n;
             Arrays.sort(files, 0, n);
             lastFileLength = (int)getFile(lastFile - 1).length();
+        } else {
+            files[0] = firstMessageId;
         }
     }
 
@@ -176,5 +182,9 @@ public class FileMessageBuffer implements Closeable {
         return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
     }
      */
+
+    public class Cursor {
+
+    }
 
 }
