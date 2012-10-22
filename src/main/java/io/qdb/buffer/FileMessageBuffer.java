@@ -114,14 +114,7 @@ public class FileMessageBuffer implements Closeable {
      * Append a message and return its id.
      */
     public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
-        if (current == null) {
-            if (lastFile == firstFile) {
-                ensureSpaceInFiles();
-                ++lastFile;
-            }
-            long firstMessageId = files[lastFile - 1];
-            current = new MessageFile(toFile(firstMessageId), firstMessageId, maxFileSize);
-        }
+        ensureCurrent();
         long id = current.append(timestamp, routingKey, payload);
         if (id < 0) {
             ensureSpaceInFiles();
@@ -136,6 +129,17 @@ public class FileMessageBuffer implements Closeable {
             }
         }
         return id;
+    }
+
+    private void ensureCurrent() throws IOException {
+        if (current == null) {
+            if (lastFile == firstFile) {
+                ensureSpaceInFiles();
+                ++lastFile;
+            }
+            long firstMessageId = files[lastFile - 1];
+            current = new MessageFile(toFile(firstMessageId), firstMessageId, maxFileSize);
+        }
     }
 
     /**
@@ -173,9 +177,19 @@ public class FileMessageBuffer implements Closeable {
     }
 
     /**
+     * What ID will the next message appended have?
+     */
+    public synchronized long getNextMessageId() throws IOException {
+        ensureCurrent();
+        return current.getNextMessageId();
+    }
+
+    /**
      * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
-     * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
+     * use 0 as the message ID. To read the newest use {@link #getNextMessageId()}.
     public MessageCursor cursor(long messageId) throws IOException {
+
+
         if (messageId < firstMessageId || messageId > getNextMessageId()) {
             throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
         }

@@ -83,6 +83,23 @@ public class FileMessageBufferTest {
     }
 
     @Test
+    public void testNextMessageId() throws IOException {
+        File bd = mkdir("nextmsg");
+
+        FileMessageBuffer b = new FileMessageBuffer(bd, 0x1234);
+        assertEquals(0x1234L, b.getNextMessageId());
+
+        long ts = System.currentTimeMillis();
+        append(b, ts, "", 256);
+        assertEquals(0x1334L, b.getNextMessageId());
+        b.close();
+
+        b = new FileMessageBuffer(bd);
+        assertEquals(0x1334L, b.getNextMessageId());
+        b.close();
+    }
+
+    @Test
     public void testMoreThan512Files() throws IOException {
         File bd = mkdir("files512");
 
