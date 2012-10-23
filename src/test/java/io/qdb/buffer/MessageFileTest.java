@@ -265,6 +265,15 @@ public class MessageFileTest {
         } catch (IllegalArgumentException ignore) {
         }
 
+        assertEquals(-1, mf.findBucketIndex(999));  // before first message
+        assertEquals(0, mf.findBucketIndex(1000));  // first message
+        assertEquals(0, mf.findBucketIndex(1001));
+        assertEquals(0, mf.findBucketIndex(1229));  // last message in first bucket
+        assertEquals(1, mf.findBucketIndex(1230));  // first message in 2nd bucket
+        assertEquals(maxBuckets - 2, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230 - 1));    // 2nd last bucket
+        assertEquals(maxBuckets - 1, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230));        // last bucket
+        assertEquals(maxBuckets - 1, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230 + 229));
+
         mf.close();
     }
 

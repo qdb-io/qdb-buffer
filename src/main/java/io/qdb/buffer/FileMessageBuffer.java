@@ -184,18 +184,37 @@ public class FileMessageBuffer implements Closeable {
         return current.getNextMessageId();
     }
 
-    /**
-     * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
-     * use 0 as the message ID. To read the newest use {@link #getNextMessageId()}.
-    public MessageCursor cursor(long messageId) throws IOException {
-
-
-        if (messageId < firstMessageId || messageId > getNextMessageId()) {
-            throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
-        }
-        return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
+    @Override
+    public String toString() {
+        return "FileMessageBuffer[" + dir + "]";
     }
+
+    /**
+     * Create a cursor reading data from messageId onwards. To read the oldest message use 0 as the message ID. To
+     * read the newest use {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor
+     * reads from the oldest message onwards.
      */
+    public synchronized MessageCursor cursor(long messageId) throws IOException {
+        if (messageId < 0) {
+            throw new IllegalArgumentException("Invalid messageId " + messageId + ", " + this);
+        }
+        long next = getNextMessageId();
+        if (messageId > next) {
+            throw new IllegalArgumentException("messageId " + messageId + " past end of buffer " + next + ", " + this);
+        }
+        int i = findFileIndex(messageId);
+        MessageFile mf = i >= lastFile ? current : new MessageFile(getFile(i), files[i]);
+        return null;
+    }
+
+    /**
+     * Get the index of the file containing messageId.
+     */
+    private int findFileIndex(long messageId) {
+        if (messageId == 0) return firstFile;
+        int i = Arrays.binarySearch(files, firstFile, lastFile, messageId);
+        return i >= 0 ? i  : -(i + 1);
+    }
 
     public class Cursor {
 
