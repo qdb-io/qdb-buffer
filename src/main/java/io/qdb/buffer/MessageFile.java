@@ -287,9 +287,9 @@ class MessageFile implements Closeable {
 
     /**
      * Get the index of the histogram bucket containing messageId or -1 if it is before the first message id or this
-     * file is empty. If messageId is after the last the last bucket index is returned.
+     * file is empty. If messageId is after the last message the last bucket index is returned.
      */
-    public int findBucketIndex(long messageId) throws IOException {
+    public int findBucket(long messageId) throws IOException {
         synchronized (channel) {
             int key = (int)(messageId - firstMessageId);
             if (key >= bucketMessageId) return bucketIndex; // last bucket
@@ -298,6 +298,27 @@ class MessageFile implements Closeable {
             while (low <= high) {
                 int mid = (low + high) >>> 1;
                 int midVal = fileHeader.getInt(bucketPosition(mid));
+                if (midVal < key) low = mid + 1;
+                else if (midVal > key) high = mid - 1;
+                else return mid;
+            }
+            return low - 1;
+        }
+    }
+
+    /**
+     * Get the index of the histogram bucket containing timestamp or -1 if it is before the first message or this
+     * file is empty. If timestamp is after the last message the last bucket index is returned.
+     */
+    public int findBucketByTimestamp(long timestamp) throws IOException {
+        synchronized (channel) {
+            int key = (int)(timestamp / 1000);
+            if (key >= bucketTime) return bucketIndex; // last bucket
+            int low = 0;
+            int high = bucketIndex - 1;
+            while (low <= high) {
+                int mid = (low + high) >>> 1;
+                int midVal = fileHeader.getInt(bucketPosition(mid) + 4);
                 if (midVal < key) low = mid + 1;
                 else if (midVal > key) high = mid - 1;
                 else return mid;

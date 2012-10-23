@@ -239,7 +239,7 @@ public class MessageFileTest {
         MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
 
         byte[] msg = new byte[100];
-        long ts = System.currentTimeMillis();
+        long ts = (System.currentTimeMillis() / 1000L) * 1000L;
         for (int i = 0; i < maxBuckets * 2; i++) {
             mf.append(ts + i * 1000, "", ByteBuffer.wrap(msg));
         }
@@ -265,14 +265,23 @@ public class MessageFileTest {
         } catch (IllegalArgumentException ignore) {
         }
 
-        assertEquals(-1, mf.findBucketIndex(999));  // before first message
-        assertEquals(0, mf.findBucketIndex(1000));  // first message
-        assertEquals(0, mf.findBucketIndex(1001));
-        assertEquals(0, mf.findBucketIndex(1229));  // last message in first bucket
-        assertEquals(1, mf.findBucketIndex(1230));  // first message in 2nd bucket
-        assertEquals(maxBuckets - 2, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230 - 1));    // 2nd last bucket
-        assertEquals(maxBuckets - 1, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230));        // last bucket
-        assertEquals(maxBuckets - 1, mf.findBucketIndex(1000 + (maxBuckets - 1) * 230 + 229));
+        assertEquals(-1, mf.findBucket(999));  // before first message
+        assertEquals(0, mf.findBucket(1000));  // first message
+        assertEquals(0, mf.findBucket(1001));
+        assertEquals(0, mf.findBucket(1229));  // last message in first bucket
+        assertEquals(1, mf.findBucket(1230));  // first message in 2nd bucket
+        assertEquals(maxBuckets - 2, mf.findBucket(1000 + (maxBuckets - 1) * 230 - 1));    // 2nd last bucket
+        assertEquals(maxBuckets - 1, mf.findBucket(1000 + (maxBuckets - 1) * 230));        // last bucket
+        assertEquals(maxBuckets - 1, mf.findBucket(1000 + (maxBuckets - 1) * 230 + 229));
+
+        assertEquals(-1, mf.findBucketByTimestamp(ts - 1));  // before first message
+        assertEquals(0, mf.findBucketByTimestamp(ts));  // first message
+        assertEquals(0, mf.findBucketByTimestamp(ts + 1));
+        assertEquals(0, mf.findBucketByTimestamp(ts + 1999));  // last message in first bucket
+        assertEquals(1, mf.findBucketByTimestamp(ts + 2000));  // first message in 2nd bucket
+        assertEquals(maxBuckets - 2, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000 - 1));    // 2nd last bucket
+        assertEquals(maxBuckets - 1, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000));        // last bucket
+        assertEquals(maxBuckets - 1, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000 + 1999));
 
         mf.close();
     }
@@ -284,7 +293,7 @@ public class MessageFileTest {
 
         MessageFile mf = new MessageFile(file, 1000, 100000);
         assertEquals(0, mf.getBucketCount());
-        assertEquals(-1, mf.findBucketIndex(1000));
+        assertEquals(-1, mf.findBucket(1000));
         mf.close();
     }
 
