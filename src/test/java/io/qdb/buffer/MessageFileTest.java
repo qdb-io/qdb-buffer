@@ -278,6 +278,17 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testFindBucketIndexEmptyFile() throws IOException {
+        File file = new File(dir, "find-bucket-index-empty.qdb");
+        file.delete();
+
+        MessageFile mf = new MessageFile(file, 1000, 100000);
+        assertEquals(0, mf.getBucketCount());
+        assertEquals(-1, mf.findBucketIndex(1000));
+        mf.close();
+    }
+
+    @Test
     public void testPerformance() throws IOException {
         if (System.getProperty("perf") == null) {
             System.out.println("Skipping testPerformance, run with -Dperf=true to enable");
