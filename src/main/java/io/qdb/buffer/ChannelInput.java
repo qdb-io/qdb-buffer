@@ -38,6 +38,23 @@ class ChannelInput {
         return nextBufferPosition - buffer.remaining();
     }
 
+    public void position(int newPosition) {
+        if (newPosition == position()) return;
+        if (newPosition >= nextBufferPosition) {
+            nextBufferPosition = newPosition;
+            buffer.limit(0);
+            return;
+        }
+        int startOfBuffer = nextBufferPosition - buffer.limit();
+        if (newPosition < startOfBuffer) {
+            nextBufferPosition = newPosition;
+            buffer.limit(0);
+            return;
+        }
+        // position to seek to is in buffer
+        buffer.position(newPosition - startOfBuffer);
+    }
+
     public byte readByte() throws IOException {
         if (!buffer.hasRemaining()) fill();
         return buffer.get();

@@ -395,6 +395,29 @@ class MessageFile implements Closeable {
     }
 
     /**
+     * Create a cursor reading data from timestamp onwards. If timestamp is before the first message then the cursor
+     * reads starting at the first message. If timestamp is past the last message then the cursor will return false
+     * until more messages appear in the file.
+    public MessageCursor cursorFromTimestamp(long timestamp) throws IOException {
+        int i = findBucketByTimestamp(timestamp);
+        if (i < 0) return cursor(firstMessageId);
+
+
+
+        if (messageId == nextMessageId) {   // at EOF
+            return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
+        }
+
+        long pos = getBucket(findBucket(messageId)).getFirstMessageId();
+        Cursor c = new Cursor((int)(pos - firstMessageId) + FILE_HEADER_SIZE);
+        if (pos < messageId) {  // skip messages until we get to the one we want
+            while (c.next() && c.getNextId() < messageId);
+        }
+        return c;
+    }
+     */
+
+    /**
      * Iterates over messages in the file. Not thread safe.
      */
     public class Cursor implements MessageCursor {

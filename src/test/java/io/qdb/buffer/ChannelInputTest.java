@@ -79,4 +79,41 @@ public class ChannelInputTest {
         ins.close();
    }
 
+    @Test
+    public void testSeek() throws IOException {
+        File file = new File(dir, "seek.dat");
+        file.delete();
+
+        // fill file with 3 buffers worth of random data
+        Random rnd = new Random(123);
+        byte[] data = new byte[8192 * 3];
+        rnd.nextBytes(data);
+        FileOutputStream fos = new FileOutputStream(file);
+        fos.write(data);
+        fos.close();
+
+        FileInputStream ins = new FileInputStream(file);
+        ChannelInput in = new ChannelInput(ins.getChannel(), 0, 8192);
+
+        in.position(0);
+        assertEquals(data[0], in.readByte());
+
+        in.position(8190);  // 2 bytes before end of buffer so next position check must move buffer
+        assertEquals(data[8190], in.readByte());
+
+        in.position(8192);  // at next buffer position
+        assertEquals(data[8192], in.readByte());
+
+        in.position(16383); // just before end of buffer
+        assertEquals(data[16383], in.readByte());
+
+        in.position(8192);  // start of buffer
+        assertEquals(data[8192], in.readByte());
+
+        in.position(8191);  // just before start of buffer
+        assertEquals(data[8191], in.readByte());
+
+        ins.close();
+    }
+
 }
