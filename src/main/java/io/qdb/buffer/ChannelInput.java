@@ -16,7 +16,7 @@ class ChannelInput {
 
     private int nextBufferPosition;
 
-    ChannelInput(FileChannel channel, int position, int bufferSize) {
+    ChannelInput(FileChannel channel, int position, int bufferSize) throws IOException {
         this.channel = channel;
         this.nextBufferPosition = position;
         this.buffer = ByteBuffer.allocateDirect(bufferSize);

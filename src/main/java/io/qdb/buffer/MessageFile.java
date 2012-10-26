@@ -432,7 +432,7 @@ class MessageFile implements Closeable {
 
         private int nextPosition;
 
-        public Cursor(int position) {
+        public Cursor(int position) throws IOException {
             input = new ChannelInput(channel, position, 8192);
         }
 
