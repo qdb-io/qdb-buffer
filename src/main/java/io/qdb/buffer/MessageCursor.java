@@ -1,11 +1,12 @@
 package io.qdb.buffer;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 /**
  * Iterate over messages in a forward direction.
  */
-public interface MessageCursor {
+public interface MessageCursor extends Closeable {
 
     /**
      * Advance to the next message or return false if there are no more messages. The cursor initially starts

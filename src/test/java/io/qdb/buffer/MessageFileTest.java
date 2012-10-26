@@ -5,11 +5,14 @@ import org.junit.Test;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 import static junit.framework.Assert.*;
 import static junit.framework.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 @SuppressWarnings("ResultOfMethodCallIgnored")
@@ -282,6 +285,68 @@ public class MessageFileTest {
         assertEquals(maxBuckets - 2, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000 - 1));    // 2nd last bucket
         assertEquals(maxBuckets - 1, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000));        // last bucket
         assertEquals(maxBuckets - 1, mf.findBucketByTimestamp(ts + (maxBuckets - 1) * 2000 + 1999));
+
+        mf.close();
+    }
+
+    private static class Msg {
+        long id;
+        long timestamp;
+        String routingKey;
+        byte[] payload;
+
+        public Msg(long timestamp, Random rnd, int maxPayloadSize) {
+            this.timestamp = timestamp;
+            routingKey = "key" + timestamp;
+            payload = new byte[rnd.nextInt(maxPayloadSize + 1)];
+            rnd.nextBytes(payload);
+        }
+    }
+
+    @Test
+    public void testReadBetweenMessages() throws IOException {
+        File file = new File(dir, "read-between-messages.qdb");
+        file.delete();
+
+        // 1000000 / 340 = approx 2900 bytes per bucket
+        MessageFile mf = new MessageFile(file, 1000, 1000000);
+
+        // write random messages until the file is full
+        Random rnd = new Random(123);
+        long ts = System.currentTimeMillis();
+        List<Msg> list = new ArrayList<Msg>();
+        while (true) {
+            Msg msg = new Msg(ts++, rnd, 500);  // avg approx 6 messages per bucket so some skipping will be required
+            msg.id = mf.append(msg.timestamp, msg.routingKey, ByteBuffer.wrap(msg.payload));
+            if (msg.id < 0) break;
+            list.add(msg);
+        }
+
+        // check we can read back each message starting at its id
+        for (Msg msg : list) {
+            MessageCursor c = mf.cursor(msg.id);
+            assertTrue(c.next());
+            assertEquals(msg.id, c.getId());
+            assertEquals(msg.timestamp, c.getTimestamp());
+            assertEquals(msg.routingKey, c.getRoutingKey());
+            assertArrayEquals(msg.payload, c.getPayload());
+            c.close();
+        }
+
+        // check we can read back each message starting at its id less a random number of bytes
+        for (int i = 0; i < list.size(); i++) {
+            Msg msg = list.get(i);
+            // more than 15 bytes might put us on the prev msg
+            MessageCursor c = mf.cursor(msg.id - (i > 0 ? rnd.nextInt(15) : 0));
+            assertTrue(c.next());
+            assertEquals(msg.id, c.getId());
+            c.close();
+        }
+
+        // check reading from most recent returns false for next
+        MessageCursor c = mf.cursor(mf.getNextMessageId());
+        assertFalse(c.next());
+        c.close();
 
         mf.close();
     }

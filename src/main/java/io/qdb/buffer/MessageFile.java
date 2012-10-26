@@ -373,12 +373,25 @@ class MessageFile implements Closeable {
     /**
      * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
      * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
+     * If messageId is 'between' messages it is advanced to the next message.
      */
+    @SuppressWarnings("StatementWithEmptyBody")
     public MessageCursor cursor(long messageId) throws IOException {
-        if (messageId < firstMessageId || messageId > getNextMessageId()) {
-            throw new IllegalArgumentException("messageId " + (messageId + firstMessageId) + " not in " + this);
+        long nextMessageId = getNextMessageId();
+        if (messageId < firstMessageId || messageId > nextMessageId) {
+            throw new IllegalArgumentException("messageId " + messageId + " not in " + this);
         }
-        return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
+
+        if (messageId == nextMessageId) {   // at EOF
+            return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
+        }
+
+        long pos = getBucket(findBucket(messageId)).getFirstMessageId();
+        Cursor c = new Cursor((int)(pos - firstMessageId) + FILE_HEADER_SIZE);
+        if (pos < messageId) {  // skip messages until we get to the one we want
+            while (c.next() && c.getNextId() < messageId);
+        }
+        return c;
     }
 
     /**
@@ -391,8 +404,10 @@ class MessageFile implements Closeable {
 
         private long id;
         private long timestamp;
-        private String routingKey;
+        private int routingKeySize;
         private int payloadSize;
+
+        private int nextPosition;
 
         public Cursor(int position) {
             input = new ChannelInput(channel, position, 8192);
@@ -403,7 +418,14 @@ class MessageFile implements Closeable {
          * "before" the next message.
          */
         public boolean next() throws IOException {
-            if (payloadSize > 0) input.skip(payloadSize);   // payload was never read
+            if (routingKeySize > 0) {
+                input.skip(routingKeySize); // routing key was never read
+                routingKeySize = -1;
+            }
+            if (payloadSize > 0) {
+                input.skip(payloadSize);       // payload was never read
+                payloadSize = -1;
+            }
 
             int len = length();
             if (input.position() >= len) return false;
@@ -418,7 +440,7 @@ class MessageFile implements Closeable {
 
             timestamp = input.readLong();
 
-            int routingKeySize = input.readShort();
+            routingKeySize = input.readShort();
             if (routingKeySize < 0 || routingKeySize >= routingKeyBuf.length) {
                 throw new IOException("Invalid routing key size " + routingKeySize + " at " +
                         (input.position() - 2) + " in " + MessageFile.this);
@@ -429,16 +451,11 @@ class MessageFile implements Closeable {
                 throw new IOException("Negative payload size " + payloadSize + " at " + (input.position() - 4)  +
                         " in " + MessageFile.this);
             }
-            if (input.position() + routingKeySize + payloadSize > len) {
+
+            nextPosition = input.position() + routingKeySize + payloadSize;
+            if (nextPosition > len) {
                 throw new IOException("Payload size " + payloadSize + " at " + (input.position() - 4) +
                         " extends beyond EOF " + len + " in " + MessageFile.this);
-            }
-
-            if (routingKeySize > 0) {
-                input.read(routingKeyBuf, 0, routingKeySize);
-                routingKey = new String(routingKeyBuf, 0, routingKeySize, UTF8);
-            } else {
-                routingKey = "";
             }
 
             return true;
@@ -452,8 +469,12 @@ class MessageFile implements Closeable {
             return timestamp;
         }
 
-        public String getRoutingKey() {
-            return routingKey;
+        public String getRoutingKey() throws IOException {
+            if (routingKeySize < 0) throw new IllegalStateException("Routing key already read");
+            input.read(routingKeyBuf, 0, routingKeySize);
+            String ans = new String(routingKeyBuf, 0, routingKeySize, UTF8);
+            routingKeySize = -1;
+            return ans;
         }
 
         public int getPayloadSize() {
@@ -461,10 +482,27 @@ class MessageFile implements Closeable {
         }
 
         public byte[] getPayload() throws IOException {
+            if (payloadSize < 0) throw new IllegalStateException("Payload already read");
+            if (routingKeySize > 0) {
+                input.skip(routingKeySize); // routing key was never read
+                routingKeySize = -1;
+            }
             byte[] buf = new byte[payloadSize];
             input.read(buf, 0, payloadSize);
-            payloadSize = 0;
+            payloadSize = -1;
             return buf;
+        }
+
+        /**
+         * Get the ID of the next message to be read.
+         */
+        public long getNextId() {
+            return firstMessageId + nextPosition - FILE_HEADER_SIZE;
+        }
+
+        @Override
+        public void close() throws IOException {
+            // nothing to do
         }
     }
 }
