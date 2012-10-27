@@ -301,6 +301,11 @@ public class MessageFileTest {
             payload = new byte[rnd.nextInt(maxPayloadSize + 1)];
             rnd.nextBytes(payload);
         }
+
+        @Override
+        public String toString() {
+            return "id:" + id + " timestamp:" + timestamp;
+        }
     }
 
     @Test
@@ -313,10 +318,11 @@ public class MessageFileTest {
 
         // write random messages until the file is full
         Random rnd = new Random(123);
-        long ts = System.currentTimeMillis();
+        long ts = 1351279645901L;
         List<Msg> list = new ArrayList<Msg>();
         while (true) {
-            Msg msg = new Msg(ts++, rnd, 500);  // avg approx 6 messages per bucket so some skipping will be required
+            Msg msg = new Msg(ts += rnd.nextInt(1000) + 1, rnd, 500);
+            // avg approx 6 messages per bucket so some skipping will be required
             msg.id = mf.append(msg.timestamp, msg.routingKey, ByteBuffer.wrap(msg.payload));
             if (msg.id < 0) break;
             list.add(msg);
@@ -344,9 +350,20 @@ public class MessageFileTest {
         }
 
         // check reading from most recent returns false for next
-        MessageCursor c = mf.cursor(mf.getNextMessageId());
-        assertFalse(c.next());
-        c.close();
+        MessageCursor cc = mf.cursor(mf.getNextMessageId());
+        assertFalse(cc.next());
+        cc.close();
+
+        // check we can read back each message starting at its timestamp
+        for (Msg msg : list) {
+            MessageCursor c = mf.cursorByTimestamp(msg.timestamp);
+            assertTrue(c.next());
+            assertEquals(msg.id, c.getId());
+            assertEquals(msg.timestamp, c.getTimestamp());
+            assertEquals(msg.routingKey, c.getRoutingKey());
+            assertArrayEquals(msg.payload, c.getPayload());
+            c.close();
+        }
 
         mf.close();
     }

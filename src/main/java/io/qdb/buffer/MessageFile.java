@@ -25,7 +25,8 @@ import java.nio.charset.Charset;
  * message CRC values for example). The assumption is that if the messages are very important they will be
  * written to multiple machines.</p>
  *
- * <p>The rest of the file header consists of up to 340 histogram buckets for fast message lookup by timestamp:</p>
+ * <p>The rest of the file header consists of up to 340 histogram buckets for fast message lookup by timestamp
+ * and id:</p>
  * <pre>
  * first message id (relative to this file): 4 bytes
  * timestamp in unix time: 4 bytes
@@ -368,6 +369,12 @@ class MessageFile implements Closeable {
         public int getSize() {
             return size;
         }
+
+        @Override
+        public String toString() {
+            return "Bucket{firstMessageId=" + firstMessageId + ", time=" + time + ", count=" + count +
+                    ", size=" + size + '}';
+        }
     }
 
     /**
@@ -382,12 +389,10 @@ class MessageFile implements Closeable {
             throw new IllegalArgumentException("messageId " + messageId + " not in " + this);
         }
 
-        if (messageId == nextMessageId) {   // at EOF
-            return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
-        }
+        if (messageId == nextMessageId) return new Cursor(messageId); // at EOF
 
         long pos = getBucket(findBucket(messageId)).getFirstMessageId();
-        Cursor c = new Cursor((int)(pos - firstMessageId) + FILE_HEADER_SIZE);
+        Cursor c = new Cursor(pos);
         if (pos < messageId) {  // skip messages until we get to the one we want
             while (c.next() && c.getNextId() < messageId);
         }
@@ -398,24 +403,28 @@ class MessageFile implements Closeable {
      * Create a cursor reading data from timestamp onwards. If timestamp is before the first message then the cursor
      * reads starting at the first message. If timestamp is past the last message then the cursor will return false
      * until more messages appear in the file.
-    public MessageCursor cursorFromTimestamp(long timestamp) throws IOException {
+     */
+    @SuppressWarnings("StatementWithEmptyBody")
+    public MessageCursor cursorByTimestamp(long timestamp) throws IOException {
         int i = findBucketByTimestamp(timestamp);
-        if (i < 0) return cursor(firstMessageId);
+        if (i < 0) return new Cursor(firstMessageId);
 
+        // the first message with timestamp >= the time we are looking for may be in a previous bucket because
+        // the bucket timestamp resolution is only seconds so go back until we get a change in time .. that way we
+        // are sure to find it
+        int time = (int)(timestamp / 1000);
+        Bucket b = getBucket(i);
+        for (; b.getTime() == time && i > 0; b = getBucket(--i));
 
-
-        if (messageId == nextMessageId) {   // at EOF
-            return new Cursor((int)(messageId - firstMessageId) + FILE_HEADER_SIZE);
-        }
-
-        long pos = getBucket(findBucket(messageId)).getFirstMessageId();
-        Cursor c = new Cursor((int)(pos - firstMessageId) + FILE_HEADER_SIZE);
-        if (pos < messageId) {  // skip messages until we get to the one we want
-            while (c.next() && c.getNextId() < messageId);
+        Cursor c = new Cursor(getBucket(i).getFirstMessageId());
+        for (; c.next(); ) {    // skip messages until we get one >= timestamp
+            if (c.getTimestamp() >= timestamp) {
+                c.unget();
+                break;
+            }
         }
         return c;
     }
-     */
 
     /**
      * Iterates over messages in the file. Not thread safe.
@@ -432,8 +441,17 @@ class MessageFile implements Closeable {
 
         private int nextPosition;
 
-        public Cursor(int position) throws IOException {
-            input = new ChannelInput(channel, position, 8192);
+        public Cursor(long messageId) throws IOException {
+            input = new ChannelInput(channel, messageIdToPosition(messageId), 8192);
+        }
+
+        private int messageIdToPosition(long messageId) {
+            return (int)(messageId - firstMessageId) + FILE_HEADER_SIZE;
+        }
+
+        private void unget() {
+            routingKeySize = payloadSize = -1;
+            input.position(messageIdToPosition(id));
         }
 
         /**
