@@ -50,11 +50,11 @@ public class FileMessageBufferTest {
         File bd = mkdir("firstmsg");
 
         FileMessageBuffer b = new FileMessageBuffer(bd, 0x1234);
-        long ts = System.currentTimeMillis();
+        long ts = 0x5678;
         assertEquals(0x1234L, append(b, ts, "", 256));
         b.close();
 
-        expect(bd.list(), "0000000000001234.qdb");
+        expect(bd.list(), "0000000000001234-0000000000005678.qdb");
 
         b = new FileMessageBuffer(bd);
         assertEquals(0x1334L, append(b, ts, "", 256));
@@ -67,19 +67,20 @@ public class FileMessageBufferTest {
 
         FileMessageBuffer b = new FileMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
-        long ts = System.currentTimeMillis();
+        long ts = 0x5678;
         append(b, ts, "", 4096);
         append(b, ts, "", 4096);
         b.close();
 
-        expect(bd.list(), "0000000000000000.qdb");
+        expect(bd.list(), "0000000000000000-0000000000005678.qdb");
 
         b = new FileMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        ts = 0x9abc;
         append(b, ts, "", 4096);
         b.close();
 
-        expect(bd.list(), "0000000000000000.qdb", "0000000000002000.qdb");
+        expect(bd.list(), "0000000000000000-0000000000005678.qdb", "0000000000002000-0000000000009abc.qdb");
     }
 
     @Test
@@ -105,12 +106,12 @@ public class FileMessageBufferTest {
 
         FileMessageBuffer b = new FileMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
-        long ts = System.currentTimeMillis();
+        int ts = 0;
         int n = 513;
         String[] expect = new String[n];
         for (int i = 0; i < n; i++) {
-            append(b, ts, "", 8192);
-            expect[i] = "00000000" + String.format("%08x", i * 8192) + ".qdb";
+            append(b, ++ts, "", 8192);
+            expect[i] = "00000000" + String.format("%08x", i * 8192) + "-00000000" + String.format("%08x", ts) + ".qdb";
         }
         b.close();
 

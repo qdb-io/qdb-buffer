@@ -8,7 +8,9 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 /**
- * Stores messages on the file system in multiple files in a directory. Thread safe.
+ * <p>Stores messages on the file system in multiple files in a directory. Thread safe. The files are named
+ * [id of first message in hex, 16 digits]-[timestamp of first message in hex, 16 digits].qdb so that they sort
+ * in message id order.</p>
  */
 public class FileMessageBuffer implements Closeable {
 
@@ -18,6 +20,7 @@ public class FileMessageBuffer implements Closeable {
     private int maxFileSize = 100 * 1024 * 1024;    // 100 MB
 
     private long[] files;           // first message ID stored in each file (from filename)
+    private long[] timestamps;      // timestamp of first message stored in each file (from filename)
     private int firstFile;          // index of first entry in files in use
     private int lastFile;           // index of last entry in files in use + 1
 
@@ -51,19 +54,25 @@ public class FileMessageBuffer implements Closeable {
         if (list == null) {
             throw new IOException("Unable to list files in [" + dir + "]");
         }
+        Arrays.sort(list);
         int n = list.length;
-        files = new long[((n / 512) + 1) * 512];
+        int len = ((n / 512) + 1) * 512;
+        files = new long[len];
+        timestamps = new long[len];
         if (n > 0) {
             for (int i = 0; i < n; i++) {
                 String name = list[i];
+                if (name.length() != 37) {
+                    throw new IOException("File [" + dir + "/" + list[i] + "] has invalid name");
+                }
                 try {
-                    files[i] = Long.parseLong(name.substring(0, name.indexOf('.')), 16);
+                    files[i] = Long.parseLong(name.substring(0, 16), 16);
+                    timestamps[i] = Long.parseLong(name.substring(17, 33), 16);
                 } catch (NumberFormatException e) {
                     throw new IOException("File [" + dir + "/" + list[i] + "] has invalid name");
                 }
             }
             lastFile = n;
-            Arrays.sort(files, 0, n);
             lastFileLength = (int)getFile(lastFile - 1).length();
         } else {
             files[0] = firstMessageId;
@@ -114,13 +123,21 @@ public class FileMessageBuffer implements Closeable {
      * Append a message and return its id.
      */
     public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
-        ensureCurrent();
+        if (current == null) {
+            if (lastFile == 0) {    // new buffer
+                current = new MessageFile(toFile(files[0], timestamp), files[0], maxFileSize);
+                ++lastFile;
+            } else {
+                long firstMessageId = files[lastFile - 1];
+                current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
+            }
+        }
         long id = current.append(timestamp, routingKey, payload);
         if (id < 0) {
             ensureSpaceInFiles();
             long firstMessageId = current.getNextMessageId();
             current.close();
-            current = new MessageFile(toFile(firstMessageId), firstMessageId, maxFileSize);
+            current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, maxFileSize);
             files[lastFile++] = firstMessageId;
             id = current.append(timestamp, routingKey, payload);
             if (id < 0) {
@@ -131,35 +148,32 @@ public class FileMessageBuffer implements Closeable {
         return id;
     }
 
-    private void ensureCurrent() throws IOException {
-        if (current == null) {
-            if (lastFile == firstFile) {
-                ensureSpaceInFiles();
-                ++lastFile;
-            }
-            long firstMessageId = files[lastFile - 1];
-            current = new MessageFile(toFile(firstMessageId), firstMessageId, maxFileSize);
-        }
-    }
-
     /**
      * Make sure there is space for one more entry in the files array.
      */
     private void ensureSpaceInFiles() {
         if (lastFile < files.length) return;
         int n = lastFile - firstFile;
+
         long[] a = new long[n + 512];
         System.arraycopy(files, firstFile, a, 0, n);
         files = a;
+
+        a = new long[n + 512];
+        System.arraycopy(timestamps, firstFile, a, 0, n);
+        timestamps = a;
+
         lastFile -= firstFile;
         firstFile = 0;
     }
 
     private static final char[] ZERO_CHARS = "0000000000000000".toCharArray();
 
-    private File toFile(long firstMessageId) {
-        String name = Long.toHexString(firstMessageId);
+    private File toFile(long firstMessageId, long timestamp) {
         StringBuilder b = new StringBuilder();
+        String name = Long.toHexString(firstMessageId);
+        b.append(ZERO_CHARS, 0, ZERO_CHARS.length - name.length()).append(name).append('-');
+        name = Long.toHexString(timestamp);
         b.append(ZERO_CHARS, 0, ZERO_CHARS.length - name.length()).append(name).append(".qdb");
         return new File(dir, b.toString());
     }
@@ -168,7 +182,7 @@ public class FileMessageBuffer implements Closeable {
         if (i < firstFile || i >= lastFile) {
             throw new IllegalArgumentException("Index " + i + " out of range (" + firstFile + " to " + (lastFile - 1) + ")");
         }
-        return toFile(files[i]);
+        return toFile(files[i], timestamps[i]);
     }
 
     @Override
@@ -180,7 +194,11 @@ public class FileMessageBuffer implements Closeable {
      * What ID will the next message appended have?
      */
     public synchronized long getNextMessageId() throws IOException {
-        ensureCurrent();
+        if (lastFile == 0) return files[lastFile];  // empty buffer
+        if (current == null) {
+            long firstMessageId = files[lastFile - 1];
+            current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
+        }
         return current.getNextMessageId();
     }
 
