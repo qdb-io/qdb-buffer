@@ -3,6 +3,7 @@ package io.qdb.buffer;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.awt.*;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -129,13 +130,13 @@ public class FileMessageBufferTest {
         File bd = mkdir("cursor");
         Random rnd = new Random(123);
 
-        FileMessageBuffer b = new FileMessageBuffer(bd);
+        FileMessageBuffer b = new FileMessageBuffer(bd, 1000);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
 
         MessageCursor c = b.cursor(0);
         assertFalse(c.next());
 
-        Msg m0 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        Msg m0 = appendFixedSizeMsg(b, 1, 4096, rnd);
         assertNextMsg(m0, c);
         assertFalse(c.next());
         c.close();
@@ -146,14 +147,14 @@ public class FileMessageBufferTest {
         assertFalse(c.next());
 
         // this fills up the first file
-        Msg m1 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        Msg m1 = appendFixedSizeMsg(b, 2, 4096, rnd);
         assertNextMsg(m1, c);
         assertFalse(c.next());
 
-        // file the 2nd file and start the 3rd
-        Msg m2 = appendFixedSizeMsg(b, 100, 4096, rnd);
-        Msg m3 = appendFixedSizeMsg(b, 100, 4096, rnd);
-        Msg m4 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        // fill the 2nd file and start the 3rd
+        Msg m2 = appendFixedSizeMsg(b, 3, 4096, rnd);
+        Msg m3 = appendFixedSizeMsg(b, 4, 4096, rnd);
+        Msg m4 = appendFixedSizeMsg(b, 5, 4096, rnd);
 
         // these messages are fetched from 2nd file (not current file)
         assertNextMsg(m2, c);
@@ -162,8 +163,33 @@ public class FileMessageBufferTest {
         // this one comes from current
         assertNextMsg(m4, c);
         assertFalse(c.next());
+        c.close();
+
+        // now run 2 cursors together
+        c = b.cursor(0);
+        MessageCursor c2 = b.cursor(0);
+        assertNextMsg(m0, c);
+        assertNextMsg(m0, c2);
+        c.close();
+        c2.close();
+
+        // check seeking works
+        seekCheck(b, m0);
+        seekCheck(b, m1);
+        seekCheck(b, m2);
+        seekCheck(b, m3);
+        seekCheck(b, m4);
 
         b.close();
+    }
+
+    private void seekCheck(FileMessageBuffer b, Msg m) throws IOException {
+        MessageCursor c = b.cursor(m.id);
+        assertNextMsg(m, c);
+        c.close();
+        c = b.cursor(m.id - 1);
+        assertNextMsg(m, c);
+        c.close();
     }
 
     private void assertNextMsg(Msg msg, MessageCursor c) throws IOException {

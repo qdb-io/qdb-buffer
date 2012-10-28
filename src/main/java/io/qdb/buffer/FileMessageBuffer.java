@@ -223,10 +223,23 @@ public class FileMessageBuffer implements Closeable {
         if (messageId > next) {
             throw new IllegalArgumentException("messageId " + messageId + " past end of buffer " + next + ", " + this);
         }
-        if (lastFile == firstFile) {
-            return new EmptyCursor();
+
+        int i;
+        synchronized (this) {
+            if (lastFile == firstFile) {
+                return new EmptyCursor();
+            }
+            long firstMessageId = files[firstFile];
+            if (messageId < firstMessageId) {
+                messageId = firstMessageId;
+            }
+
+            i = Arrays.binarySearch(files, firstFile, lastFile, messageId);
+            if (i < 0) {
+                i = -(i + 2); // return position before the insertion index if we didn't get a match
+            }
         }
-        int i = findFile(messageId);
+
         MessageFile mf = getMessageFileForCursor(i);
         return new Cursor(i, mf, mf.cursor(messageId));
     }
@@ -241,15 +254,6 @@ public class FileMessageBuffer implements Closeable {
             }
         }
         return new MessageFile(getFile(i), files[i]);
-    }
-
-    /**
-     * Get the index of the file containing messageId.
-     */
-    private synchronized int findFile(long messageId) {
-        if (messageId == 0) return firstFile;
-        int i = Arrays.binarySearch(files, firstFile, lastFile, messageId);
-        return i >= 0 ? i  : -(i + 1);
     }
 
     private class Cursor implements MessageCursor {
