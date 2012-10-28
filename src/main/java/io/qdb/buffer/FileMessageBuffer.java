@@ -216,8 +216,41 @@ public class FileMessageBuffer implements Closeable {
         return i >= 0 ? i  : -(i + 1);
     }
 
-    public class Cursor {
+    public class Cursor implements MessageCursor {
 
+        @Override
+        public boolean next() throws IOException {
+            return false;
+        }
+
+        @Override
+        public long getId() throws IOException {
+            return 0;
+        }
+
+        @Override
+        public long getTimestamp() throws IOException {
+            return 0;
+        }
+
+        @Override
+        public String getRoutingKey() throws IOException {
+            return null;
+        }
+
+        @Override
+        public int getPayloadSize() throws IOException {
+            return 0;
+        }
+
+        @Override
+        public byte[] getPayload() throws IOException {
+            return new byte[0];
+        }
+
+        @Override
+        public void close() throws IOException {
+        }
     }
 
 }

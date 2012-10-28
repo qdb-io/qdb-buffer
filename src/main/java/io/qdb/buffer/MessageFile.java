@@ -57,6 +57,7 @@ class MessageFile implements Closeable {
     private final ByteBuffer fileHeader;
     private final ByteBuffer header;
     private final ByteBuffer[] srcs = new ByteBuffer[2];
+    private int usageCounter = 1;
 
     private int length;
     private int lastCheckpointLength;
@@ -245,11 +246,35 @@ class MessageFile implements Closeable {
         }
     }
 
+    /**
+     * Increment the usage counter for this file. Each call to {@link #close()} decrements the counter and the file
+     * is actually closed when the counter reaches zero.
+     */
+    public void use() {
+        synchronized (channel) {
+            ++usageCounter;
+        }
+    }
+
+    /**
+     * Close this file if no-one else is using it (see {@link #use()}).
+     */
     @Override
     public void close() throws IOException {
         synchronized (channel) {
-            checkpoint(true);
-            raf.close();
+            if (--usageCounter == 0) {
+                checkpoint(true);
+                raf.close();
+            }
+        }
+    }
+
+    /**
+     * Is this file open?
+     */
+    public boolean isOpen() {
+        synchronized (channel) {
+            return channel.isOpen();
         }
     }
 
