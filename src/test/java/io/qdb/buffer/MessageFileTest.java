@@ -289,25 +289,6 @@ public class MessageFileTest {
         mf.close();
     }
 
-    private static class Msg {
-        long id;
-        long timestamp;
-        String routingKey;
-        byte[] payload;
-
-        public Msg(long timestamp, Random rnd, int maxPayloadSize) {
-            this.timestamp = timestamp;
-            routingKey = "key" + timestamp;
-            payload = new byte[rnd.nextInt(maxPayloadSize + 1)];
-            rnd.nextBytes(payload);
-        }
-
-        @Override
-        public String toString() {
-            return "id:" + id + " timestamp:" + timestamp;
-        }
-    }
-
     @Test
     public void testReadBetweenMessages() throws IOException {
         File file = new File(dir, "read-between-messages.qdb");

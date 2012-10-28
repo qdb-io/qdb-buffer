@@ -405,7 +405,7 @@ class MessageFile implements Closeable {
     /**
      * Create a cursor reading data from messageId onwards. To read the oldest message appearing in the file
      * use {@link #getFirstMessageId()} as the message ID. To read the newest use {@link #getNextMessageId()}.
-     * If messageId is 'between' messages it is advanced to the next message.
+     * If messageId is 'between' messages it is advanced to the next message. The cursor is not thread safe.
      */
     @SuppressWarnings("StatementWithEmptyBody")
     public MessageCursor cursor(long messageId) throws IOException {
@@ -454,7 +454,7 @@ class MessageFile implements Closeable {
     /**
      * Iterates over messages in the file. Not thread safe.
      */
-    public class Cursor implements MessageCursor {
+    private class Cursor implements MessageCursor {
 
         private final ChannelInput input;
         private final byte[] routingKeyBuf = new byte[1024];

@@ -125,7 +125,7 @@ public class FileMessageBuffer implements Closeable {
     public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
         if (current == null) {
             if (lastFile == 0) {    // new buffer
-                current = new MessageFile(toFile(files[0], timestamp), files[0], maxFileSize);
+                current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], maxFileSize);
                 ++lastFile;
             } else {
                 long firstMessageId = files[lastFile - 1];
@@ -138,6 +138,7 @@ public class FileMessageBuffer implements Closeable {
             long firstMessageId = current.getNextMessageId();
             current.close();
             current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, maxFileSize);
+            timestamps[lastFile] = timestamp;
             files[lastFile++] = firstMessageId;
             id = current.append(timestamp, routingKey, payload);
             if (id < 0) {
@@ -194,7 +195,9 @@ public class FileMessageBuffer implements Closeable {
      * What ID will the next message appended have?
      */
     public synchronized long getNextMessageId() throws IOException {
-        if (lastFile == 0) return files[lastFile];  // empty buffer
+        if (lastFile == 0) {
+            return files[lastFile];  // empty buffer
+        }
         if (current == null) {
             long firstMessageId = files[lastFile - 1];
             current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
@@ -210,9 +213,9 @@ public class FileMessageBuffer implements Closeable {
     /**
      * Create a cursor reading data from messageId onwards. To read the oldest message use 0 as the message ID. To
      * read the newest use {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor
-     * reads from the oldest message onwards.
+     * reads from the oldest message onwards. The cursor is not thread safe.
      */
-    public synchronized MessageCursor cursor(long messageId) throws IOException {
+    public MessageCursor cursor(long messageId) throws IOException {
         if (messageId < 0) {
             throw new IllegalArgumentException("Invalid messageId " + messageId + ", " + this);
         }
@@ -220,54 +223,115 @@ public class FileMessageBuffer implements Closeable {
         if (messageId > next) {
             throw new IllegalArgumentException("messageId " + messageId + " past end of buffer " + next + ", " + this);
         }
-        int i = findFileIndex(messageId);
-        MessageFile mf = i >= lastFile ? current : new MessageFile(getFile(i), files[i]);
-        return null;
+        if (lastFile == firstFile) {
+            return new EmptyCursor();
+        }
+        int i = findFile(messageId);
+        MessageFile mf = getMessageFileForCursor(i);
+        return new Cursor(i, mf, mf.cursor(messageId));
+    }
+
+    private MessageFile getMessageFileForCursor(int i) throws IOException {
+        synchronized (this) {
+            if (i == lastFile - 1) {
+                current.use();
+                return current;
+            } else if (i >= lastFile) {
+                return null;
+            }
+        }
+        return new MessageFile(getFile(i), files[i]);
     }
 
     /**
      * Get the index of the file containing messageId.
      */
-    private int findFileIndex(long messageId) {
+    private synchronized int findFile(long messageId) {
         if (messageId == 0) return firstFile;
         int i = Arrays.binarySearch(files, firstFile, lastFile, messageId);
         return i >= 0 ? i  : -(i + 1);
     }
 
-    public class Cursor implements MessageCursor {
+    private class Cursor implements MessageCursor {
+
+        protected int fileIndex;
+        protected MessageFile mf;
+        protected MessageCursor c;
+
+        public Cursor(int fileIndex, MessageFile mf, MessageCursor c) {
+            this.fileIndex = fileIndex;
+            this.mf = mf;
+            this.c = c;
+        }
+
+        public boolean next() throws IOException {
+            if (c.next()) return true;
+            synchronized (this) {
+                if (mf == current) return false;
+            }
+            close();
+            mf = getMessageFileForCursor(++fileIndex);
+            c = mf.cursor(mf.getFirstMessageId());
+            return c.next();
+        }
+
+        public long getId() throws IOException {
+            return c.getId();
+        }
+
+        public long getTimestamp() throws IOException {
+            return c.getTimestamp();
+        }
+
+        public String getRoutingKey() throws IOException {
+            return c.getRoutingKey();
+        }
+
+        public int getPayloadSize() throws IOException {
+            return c.getPayloadSize();
+        }
+
+        public byte[] getPayload() throws IOException {
+            return c.getPayload();
+        }
+
+        public void close() throws IOException {
+            if (c != null) {
+                c.close();
+                c = null;
+            }
+            if (mf != null) {
+                mf.close();
+                mf = null;
+            }
+        }
+
+        @Override
+        protected void finalize() throws Throwable {
+            super.finalize();
+            close();
+        }
+    }
+
+    /**
+     * This implementation is used when the buffer is empty. It checks to see if the buffer is still empty on
+     * each call to next and initializes the cursor when the buffer becomes not empty.
+     */
+    private class EmptyCursor extends Cursor {
+
+        private EmptyCursor() {
+            super(-1, null, null);
+        }
 
         @Override
         public boolean next() throws IOException {
-            return false;
-        }
-
-        @Override
-        public long getId() throws IOException {
-            return 0;
-        }
-
-        @Override
-        public long getTimestamp() throws IOException {
-            return 0;
-        }
-
-        @Override
-        public String getRoutingKey() throws IOException {
-            return null;
-        }
-
-        @Override
-        public int getPayloadSize() throws IOException {
-            return 0;
-        }
-
-        @Override
-        public byte[] getPayload() throws IOException {
-            return new byte[0];
-        }
-
-        @Override
-        public void close() throws IOException {
+            if (fileIndex < 0) {
+                mf = getMessageFileForCursor(0);
+                if (mf == null) return false;
+                fileIndex = 0;
+                c = mf.cursor(mf.getFirstMessageId());
+            }
+            return super.next();
         }
     }
 

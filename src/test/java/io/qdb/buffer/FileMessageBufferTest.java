@@ -5,9 +5,15 @@ import org.junit.Test;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
 import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertTrue;
+import static org.junit.Assert.assertArrayEquals;
 
 public class FileMessageBufferTest {
 
@@ -62,8 +68,8 @@ public class FileMessageBufferTest {
     }
 
     @Test
-    public void testOpenAndRead() throws IOException {
-        File bd = mkdir("read");
+    public void testOpenExisting() throws IOException {
+        File bd = mkdir("open-existing");
 
         FileMessageBuffer b = new FileMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
@@ -116,6 +122,66 @@ public class FileMessageBufferTest {
         b.close();
 
         expect(bd.list(), expect);
+    }
+
+    @Test
+    public void testCursor() throws IOException {
+        File bd = mkdir("cursor");
+        Random rnd = new Random(123);
+
+        FileMessageBuffer b = new FileMessageBuffer(bd);
+        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+
+        MessageCursor c = b.cursor(0);
+        assertFalse(c.next());
+
+        Msg m0 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        assertNextMsg(m0, c);
+        assertFalse(c.next());
+        c.close();
+
+        // cursor starting on an empty buffer is a special case so repeat the test with a 'normal' cursor
+        c = b.cursor(0);
+        assertNextMsg(m0, c);
+        assertFalse(c.next());
+
+        // this fills up the first file
+        Msg m1 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        assertNextMsg(m1, c);
+        assertFalse(c.next());
+
+        // file the 2nd file and start the 3rd
+        Msg m2 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        Msg m3 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        Msg m4 = appendFixedSizeMsg(b, 100, 4096, rnd);
+
+        // these messages are fetched from 2nd file (not current file)
+        assertNextMsg(m2, c);
+        assertNextMsg(m3, c);
+
+        // this one comes from current
+        assertNextMsg(m4, c);
+        assertFalse(c.next());
+
+        b.close();
+    }
+
+    private void assertNextMsg(Msg msg, MessageCursor c) throws IOException {
+        assertTrue(c.next());
+        assertEquals(msg.id, c.getId());
+        assertEquals(msg.timestamp, c.getTimestamp());
+        assertEquals(msg.routingKey, c.getRoutingKey());
+        assertEquals(msg.payload.length, c.getPayloadSize());
+        assertArrayEquals(msg.payload, c.getPayload());
+    }
+
+    private Msg appendFixedSizeMsg(FileMessageBuffer b, long ts, int totalSize, Random rnd) throws IOException {
+        String key = "key" + ts;
+        byte[] payload = new byte[totalSize - 15 - key.length()];
+        rnd.nextBytes(payload);
+        Msg msg = new Msg(ts, key, payload);
+        msg.id = b.append(msg.timestamp, msg.routingKey, ByteBuffer.wrap(msg.payload));
+        return msg;
     }
 
     private void expect(String[] actual, String... expected) {
