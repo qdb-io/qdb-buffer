@@ -10,7 +10,8 @@ public interface MessageCursor extends Closeable {
 
     /**
      * Advance to the next message or return false if there are no more messages. The cursor initially starts
-     * "before" the first message (if any).
+     * "before" the first message (if any). Note that it is ok to call next repeatedly after it returns false.
+     * If a new message is appended it will return true and the message can be read.
      */
     public boolean next() throws IOException;
 

@@ -380,6 +380,38 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testCursorSeesNewMessage() throws IOException {
+        File file = new File(dir, "cursor-sees-new-msg.qdb");
+        file.delete();
+
+        MessageFile mf = new MessageFile(file, 1000, 100000);
+        MessageCursor c = mf.cursor(1000);
+        assertFalse(c.next());
+
+        long ts0 = System.currentTimeMillis();
+        String key0 = "foo";
+        byte[] payload0 = "piggy".getBytes("UTF8");
+        long id0 = mf.append(ts0, key0, ByteBuffer.wrap(payload0));
+        assertTrue(c.next());
+        assertEquals(id0, c.getId());
+        assertEquals(ts0, c.getTimestamp());
+        assertEquals(payload0.length, c.getPayloadSize());
+        assertArrayEquals(payload0, c.getPayload());
+        assertFalse(c.next());
+
+        long ts1 = ts0 + 1;
+        String key1 = "foobar";
+        byte[] payload1 = "oink".getBytes("UTF8");
+        long id1 = mf.append(ts1, key1, ByteBuffer.wrap(payload1));
+        assertTrue(c.next());
+        assertEquals(id1, c.getId());
+        assertEquals(ts1, c.getTimestamp());
+        assertArrayEquals(payload1, c.getPayload());
+
+        mf.close();
+    }
+
+    @Test
     public void testPerformance() throws IOException {
         if (System.getProperty("perf") == null) {
             System.out.println("Skipping testPerformance, run with -Dperf=true to enable");
