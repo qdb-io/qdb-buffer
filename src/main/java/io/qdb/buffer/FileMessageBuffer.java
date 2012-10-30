@@ -168,6 +168,24 @@ public class FileMessageBuffer implements Closeable {
         firstFile = 0;
     }
 
+    /**
+     * If this buffer is exceeding its maximum capacity then delete the oldest file(s) until it is under the limit.
+     */
+    public void cleanup() throws IOException {
+        for (;;) {
+            File doomed;
+            synchronized (this) {
+                if (getLength() <= maxBufferSize || firstFile >= lastFile - 1) return;
+                doomed = getFile(firstFile);
+                ++firstFile;
+                // todo what about cursors that might have doomed open?
+            }
+            if (!doomed.delete()) {
+                throw new IOException("Unable to delete [" + doomed + "]");
+            }
+        }
+    }
+
     private static final char[] ZERO_CHARS = "0000000000000000".toCharArray();
 
     private File toFile(long firstMessageId, long timestamp) {

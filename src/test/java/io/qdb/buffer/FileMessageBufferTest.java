@@ -247,4 +247,29 @@ public class FileMessageBufferTest {
         return f;
     }
 
+    @Test
+    public void testCleanup() throws IOException {
+        File bd = mkdir("cleanup");
+
+        FileMessageBuffer b = new FileMessageBuffer(bd);
+        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        expect(bd.list(),
+                "0000000000000000-0000000000000000.qdb", "0000000000002000-0000000000000000.qdb",
+                "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+
+        b.setMaxBufferSize((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
+        b.cleanup();
+        expect(bd.list(), "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+
+        b.setMaxBufferSize(0);  // can't get rid of last file
+        b.cleanup();
+        expect(bd.list(), "0000000000006000-0000000000000000.qdb");
+
+        b.close();
+    }
+
 }
