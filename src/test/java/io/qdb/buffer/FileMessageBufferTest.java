@@ -3,12 +3,9 @@ package io.qdb.buffer;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.awt.*;
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Random;
 
 import static junit.framework.Assert.assertEquals;
@@ -136,7 +133,7 @@ public class FileMessageBufferTest {
         MessageCursor c = b.cursor(0);
         assertFalse(c.next());
 
-        Msg m0 = appendFixedSizeMsg(b, 1, 4096, rnd);
+        Msg m0 = appendFixedSizeMsg(b, 100, 4096, rnd);
         assertNextMsg(m0, c);
         assertFalse(c.next());
         c.close();
@@ -147,14 +144,14 @@ public class FileMessageBufferTest {
         assertFalse(c.next());
 
         // this fills up the first file
-        Msg m1 = appendFixedSizeMsg(b, 2, 4096, rnd);
+        Msg m1 = appendFixedSizeMsg(b, 200, 4096, rnd);
         assertNextMsg(m1, c);
         assertFalse(c.next());
 
         // fill the 2nd file and start the 3rd
-        Msg m2 = appendFixedSizeMsg(b, 3, 4096, rnd);
-        Msg m3 = appendFixedSizeMsg(b, 4, 4096, rnd);
-        Msg m4 = appendFixedSizeMsg(b, 5, 4096, rnd);
+        Msg m2 = appendFixedSizeMsg(b, 300, 4096, rnd);
+        Msg m3 = appendFixedSizeMsg(b, 400, 4096, rnd);
+        Msg m4 = appendFixedSizeMsg(b, 500, 4096, rnd);
 
         // these messages are fetched from 2nd file (not current file)
         assertNextMsg(m2, c);
@@ -173,21 +170,37 @@ public class FileMessageBufferTest {
         c.close();
         c2.close();
 
-        // check seeking works
-        seekCheck(b, m0);
-        seekCheck(b, m1);
-        seekCheck(b, m2);
-        seekCheck(b, m3);
-        seekCheck(b, m4);
+        // check seeking by id works
+        seekByIdCheck(b, m0);
+        seekByIdCheck(b, m1);
+        seekByIdCheck(b, m2);
+        seekByIdCheck(b, m3);
+        seekByIdCheck(b, m4);
+
+        // check seeking by timestamp works
+        seekByTimestampCheck(b, m0);
+        seekByTimestampCheck(b, m1);
+        seekByTimestampCheck(b, m2);
+        seekByTimestampCheck(b, m3);
+        seekByTimestampCheck(b, m4);
 
         b.close();
     }
 
-    private void seekCheck(FileMessageBuffer b, Msg m) throws IOException {
+    private void seekByIdCheck(FileMessageBuffer b, Msg m) throws IOException {
         MessageCursor c = b.cursor(m.id);
         assertNextMsg(m, c);
         c.close();
         c = b.cursor(m.id - 1);
+        assertNextMsg(m, c);
+        c.close();
+    }
+
+    private void seekByTimestampCheck(FileMessageBuffer b, Msg m) throws IOException {
+        MessageCursor c = b.cursorByTimestamp(m.timestamp);
+        assertNextMsg(m, c);
+        c.close();
+        c = b.cursorByTimestamp(m.timestamp - 99);
         assertNextMsg(m, c);
         c.close();
     }

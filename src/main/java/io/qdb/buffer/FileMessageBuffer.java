@@ -244,6 +244,32 @@ public class FileMessageBuffer implements Closeable {
         return new Cursor(i, mf, mf.cursor(messageId));
     }
 
+    /**
+     * Create a cursor reading data from timestamp onwards. If timestamp is before the first message then the cursor
+     * reads starting at the first message. If timestamp is past the last message then the cursor will return false
+     * until more messages appear in the buffer.
+     */
+    public MessageCursor cursorByTimestamp(long timestamp) throws IOException {
+        int i;
+        synchronized (this) {
+            if (lastFile == firstFile) {
+                return new EmptyCursor();
+            }
+            long firstTimestamp = timestamps[firstFile];
+            if (timestamp < firstTimestamp) {
+                timestamp = firstTimestamp;
+            }
+
+            i = Arrays.binarySearch(timestamps, firstFile, lastFile, timestamp);
+            if (i < 0) {
+                i = -(i + 2); // return position before the insertion index if we didn't get a match
+            }
+        }
+
+        MessageFile mf = getMessageFileForCursor(i);
+        return new Cursor(i, mf, mf.cursorByTimestamp(timestamp));
+    }
+
     private MessageFile getMessageFileForCursor(int i) throws IOException {
         synchronized (this) {
             if (i == lastFile - 1) {
