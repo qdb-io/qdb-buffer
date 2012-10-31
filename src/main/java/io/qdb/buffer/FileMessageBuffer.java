@@ -6,6 +6,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.concurrent.Executor;
 
 /**
  * <p>Stores messages on the file system in multiple files in a directory. Thread safe. The files are named
@@ -26,6 +27,9 @@ public class FileMessageBuffer implements Closeable {
 
     private MessageFile current;    // file we are currently appending to
     private int lastFileLength;     // only used if current is null
+
+    private Executor cleanupExecutor;
+    private Runnable cleanupJob;
 
     private static final FilenameFilter QDB_FILTER = new FilenameFilter() {
         @Override
@@ -85,6 +89,7 @@ public class FileMessageBuffer implements Closeable {
 
     /**
      * Set the maximum size of this buffer in bytes. When it is full the oldest messages are deleted to make space.
+     * Use zero for unlimited size.
      */
     public void setMaxBufferSize(long maxBufferSize) {
         this.maxBufferSize = maxBufferSize;
@@ -92,6 +97,30 @@ public class FileMessageBuffer implements Closeable {
 
     public int getMaxFileSize() {
         return maxFileSize;
+    }
+
+    /**
+     * Provide an executor (e.g. thread pool) to do cleanup's asynchronously when the buffer starts a new message
+     * file. If no executor is set then cleanups are done synchronously.
+     */
+    public void setCleanupExecutor(Executor cleanupExecutor) {
+        this.cleanupExecutor = cleanupExecutor;
+        if (cleanupJob == null) {
+            cleanupJob = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        cleanup();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            };
+        }
+    }
+
+    public Executor getCleanupExecutor() {
+        return cleanupExecutor;
     }
 
     /**
@@ -145,6 +174,11 @@ public class FileMessageBuffer implements Closeable {
                 throw new IllegalArgumentException("Message is too long, max size is approximately " + maxBufferSize +
                         " bytes");
             }
+            if (cleanupExecutor != null) {
+                cleanupExecutor.execute(cleanupJob);
+            } else {
+                cleanup();
+            }
         }
         return id;
     }
@@ -175,7 +209,7 @@ public class FileMessageBuffer implements Closeable {
         for (;;) {
             File doomed;
             synchronized (this) {
-                if (getLength() <= maxBufferSize || firstFile >= lastFile - 1) return;
+                if (maxBufferSize == 0 || getLength() <= maxBufferSize || firstFile >= lastFile - 1) return;
                 doomed = getFile(firstFile);
                 ++firstFile;
                 // todo what about cursors that might have doomed open?

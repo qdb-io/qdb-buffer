@@ -1,5 +1,6 @@
 package io.qdb.buffer;
 
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -7,6 +8,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.Executor;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -265,11 +267,44 @@ public class FileMessageBufferTest {
         b.cleanup();
         expect(bd.list(), "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
 
-        b.setMaxBufferSize(0);  // can't get rid of last file
+        b.setMaxBufferSize(1);  // can't get rid of last file
         b.cleanup();
         expect(bd.list(), "0000000000006000-0000000000000000.qdb");
 
         b.close();
+    }
+
+    @Test
+    public void testAutoCleanup() throws IOException {
+        File bd = mkdir("auto-cleanup");
+
+        FileMessageBuffer b = new FileMessageBuffer(bd);
+        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setMaxBufferSize((8192 + MessageFile.FILE_HEADER_SIZE) * 3);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        append(b, 0, "", 8192);
+        expect(bd.list(),
+                "0000000000002000-0000000000000000.qdb",
+                "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+
+        CountingExecutor exec = new CountingExecutor();
+        b.setCleanupExecutor(exec);
+        append(b, 0, "", 8192);
+        assertEquals(1, exec.count);
+
+        b.close();
+    }
+
+    private class CountingExecutor implements Executor {
+        int count;
+
+        @Override
+        public void execute(Runnable command) {
+            ++count;
+            command.run();
+        }
     }
 
 }
