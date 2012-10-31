@@ -9,11 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import static junit.framework.Assert.*;
-import static junit.framework.Assert.assertEquals;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @SuppressWarnings("ResultOfMethodCallIgnored")
 public class MessageFileTest {
@@ -267,6 +263,8 @@ public class MessageFileTest {
             fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException ignore) {
         }
+
+        assertTrue(mf.getBucket(0).toString().contains("Bucket"));
 
         assertEquals(-1, mf.findBucket(999));  // before first message
         assertEquals(0, mf.findBucket(1000));  // first message

@@ -83,16 +83,16 @@ public class FileMessageBuffer implements Closeable {
         }
     }
 
-    public long getMaxBufferSize() {
-        return maxBufferSize;
-    }
-
     /**
      * Set the maximum size of this buffer in bytes. When it is full the oldest messages are deleted to make space.
      * Use zero for unlimited size.
      */
     public void setMaxBufferSize(long maxBufferSize) {
         this.maxBufferSize = maxBufferSize;
+    }
+
+    public long getMaxBufferSize() {
+        return maxBufferSize;
     }
 
     public int getMaxFileSize() {

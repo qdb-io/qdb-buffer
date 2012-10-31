@@ -29,6 +29,7 @@ public class FileMessageBufferTest {
     @Test
     public void testAppend() throws IOException {
         FileMessageBuffer b = new FileMessageBuffer(mkdir("append"));
+        assertTrue(b.toString().contains("append"));
         b.setMaxFileSize(10000 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(0, b.getFileCount());
         assertEquals(0L, b.getLength());
@@ -280,7 +281,9 @@ public class FileMessageBufferTest {
 
         FileMessageBuffer b = new FileMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
-        b.setMaxBufferSize((8192 + MessageFile.FILE_HEADER_SIZE) * 3);
+        int maxBufferSize = (8192 + MessageFile.FILE_HEADER_SIZE) * 3;
+        b.setMaxBufferSize(maxBufferSize);
+        assertEquals(maxBufferSize, b.getMaxBufferSize());
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
@@ -291,6 +294,7 @@ public class FileMessageBufferTest {
 
         CountingExecutor exec = new CountingExecutor();
         b.setCleanupExecutor(exec);
+        assertTrue(b.getCleanupExecutor() == exec);
         append(b, 0, "", 8192);
         assertEquals(1, exec.count);
 
