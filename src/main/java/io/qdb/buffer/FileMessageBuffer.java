@@ -13,7 +13,7 @@ import java.util.concurrent.Executor;
  * [id of first message in hex, 16 digits]-[timestamp of first message in hex, 16 digits].qdb so that they sort
  * in message id order.</p>
  */
-public class FileMessageBuffer implements Closeable {
+public class FileMessageBuffer implements MessageBuffer {
 
     private final File dir;
 
@@ -148,9 +148,7 @@ public class FileMessageBuffer implements Closeable {
         return lastFile - firstFile;
     }
 
-    /**
-     * Append a message and return its id.
-     */
+    @Override
     public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
         if (current == null) {
             if (lastFile == 0) {    // new buffer
@@ -243,9 +241,7 @@ public class FileMessageBuffer implements Closeable {
         if (current != null) current.close();
     }
 
-    /**
-     * What ID will the next message appended have?
-     */
+    @Override
     public synchronized long getNextMessageId() throws IOException {
         if (lastFile == 0) {
             return files[lastFile];  // empty buffer
@@ -262,11 +258,7 @@ public class FileMessageBuffer implements Closeable {
         return "FileMessageBuffer[" + dir + "]";
     }
 
-    /**
-     * Create a cursor reading data from messageId onwards. To read the oldest message use 0 as the message ID. To
-     * read the newest use {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor
-     * reads from the oldest message onwards. The cursor is not thread safe.
-     */
+    @Override
     public MessageCursor cursor(long messageId) throws IOException {
         if (messageId < 0) {
             throw new IllegalArgumentException("Invalid messageId " + messageId + ", " + this);
@@ -296,11 +288,7 @@ public class FileMessageBuffer implements Closeable {
         return new Cursor(i, mf, mf.cursor(messageId));
     }
 
-    /**
-     * Create a cursor reading data from timestamp onwards. If timestamp is before the first message then the cursor
-     * reads starting at the first message. If timestamp is past the last message then the cursor will return false
-     * until more messages appear in the buffer.
-     */
+    @Override
     public MessageCursor cursorByTimestamp(long timestamp) throws IOException {
         int i;
         synchronized (this) {

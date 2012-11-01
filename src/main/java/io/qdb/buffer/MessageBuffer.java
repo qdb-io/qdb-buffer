@@ -1,53 +1,37 @@
 package io.qdb.buffer;
 
+import java.io.Closeable;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
- * Queue that supports sequential retrieval of old messages i.e. it also behaves like a list.
+ * Queue that supports sequential retrieval of old messages by id and timestamp.
  */
-public interface MessageBuffer {
+public interface MessageBuffer extends Closeable {
 
     /**
-     * Add a message to the buffer and return its unique id. The id will always be bigger than the id of any
-     * previously added messages.
+     * Append a message and return its id.
      */
-    long add(byte[] data, int offset, int length) throws IOException;
+    long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException;
 
     /**
-     * Get a message from the buffer by id. If id is 0 then the oldest message (smallest id) is returned. If id is -1
-     * then the newest message (biggest id) is returned. If the buffer is empty null is returned.
+     * What ID will the next message appended have?
      */
-    Msg get(long id);
+    long getNextMessageId() throws IOException;
 
     /**
-     * Remove all messages with ID less than or equal to id from the buffer.
+     * Create a cursor reading data from messageId onwards. To read the oldest message use 0 as the message ID. To
+     * read the newest use {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor
+     * reads from the oldest message onwards. The cursor should only be used from one thread at a time i.e. it is not
+     * thread safe.
      */
-    void remove(long id);
+    MessageCursor cursor(long messageId) throws IOException;
 
     /**
-     * A message retrieved from the buffer.
+     * Create a cursor reading data from timestamp onwards. If timestamp is before the first message then the cursor
+     * reads starting at the first message. If timestamp is past the last message then the cursor will return false
+     * until more messages appear in the buffer. The cursor should only be used from one thread at a time i.e. it is
+     * not thread safe.
      */
-    interface Msg {
-
-        /**
-         * The unique ID of the message.
-         */
-        long getId();
-
-        /**
-         * When was the message added to the buffer?
-         */
-        long getTimestamp();
-
-        /**
-         * What is the size of the message in bytes?
-         */
-        int size();
-
-        /**
-         * Get the message data into a new byte[] array.
-         */
-        byte[] getBytes();
-    }
-
+    MessageCursor cursorByTimestamp(long timestamp) throws IOException;
 }
