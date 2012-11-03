@@ -3,7 +3,7 @@ apply plugin: 'maven'
 apply plugin: 'jetty'
 apply from: 'https://github.com/breskeby/gradleplugins/raw/master/emmaPlugin/emma.gradle'
 
-group = 'io.qdb.buffer'
+group = 'qdb.io.buffer'
 version = '0.9.0'
 
 repositories {

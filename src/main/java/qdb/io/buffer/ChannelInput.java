@@ -1,4 +1,4 @@
-package io.qdb.buffer;
+package qdb.io.buffer;
 
 import java.io.EOFException;
 import java.io.IOException;

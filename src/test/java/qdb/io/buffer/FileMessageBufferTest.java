@@ -1,6 +1,5 @@
-package io.qdb.buffer;
+package qdb.io.buffer;
 
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

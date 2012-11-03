@@ -1,13 +1,11 @@
-package io.qdb.buffer;
+package qdb.io.buffer;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
-import java.nio.ByteBuffer;
 import java.util.Random;
 
-import static junit.framework.Assert.*;
 import static junit.framework.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.fail;

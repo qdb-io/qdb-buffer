@@ -1,6 +1,5 @@
-package io.qdb.buffer;
+package qdb.io.buffer;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
