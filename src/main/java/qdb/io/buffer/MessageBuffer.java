@@ -34,4 +34,20 @@ public interface MessageBuffer extends Closeable {
      * not thread safe.
      */
     MessageCursor cursorByTimestamp(long timestamp) throws IOException;
+
+    /**
+     * Set the maximum size of this buffer in bytes. When it is full the oldest messages are deleted to make space.
+     * Use zero for unlimited size.
+     */
+    void setMaxLength(long bytes) throws IOException;
+
+    /**
+     * What is the maximum size of this buffer in bytes?
+     */
+    long getMaxLength();
+
+    /**
+     * How much space is this buffer currently consuming in bytes?
+     */
+    long getLength();
 }

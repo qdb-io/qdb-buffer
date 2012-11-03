@@ -14,7 +14,7 @@ import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertArrayEquals;
 
-public class FileMessageBufferTest {
+public class PersistentMessageBufferTest {
 
     private static File dir = new File("build/test-data");
 
@@ -27,7 +27,7 @@ public class FileMessageBufferTest {
 
     @Test
     public void testAppend() throws IOException {
-        FileMessageBuffer b = new FileMessageBuffer(mkdir("append"));
+        PersistentMessageBuffer b = new PersistentMessageBuffer(mkdir("append"));
         assertTrue(b.toString().contains("append"));
         b.setMaxFileSize(10000 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(0, b.getFileCount());
@@ -55,14 +55,14 @@ public class FileMessageBufferTest {
     public void testFirstMessageId() throws IOException {
         File bd = mkdir("firstmsg");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd, 0x1234);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 0x1234);
         long ts = 0x5678;
         assertEquals(0x1234L, append(b, ts, "", 256));
         b.close();
 
         expect(bd.list(), "0000000000001234-0000000000005678.qdb");
 
-        b = new FileMessageBuffer(bd);
+        b = new PersistentMessageBuffer(bd);
         assertEquals(0x1334L, append(b, ts, "", 256));
         b.close();
     }
@@ -71,7 +71,7 @@ public class FileMessageBufferTest {
     public void testOpenExisting() throws IOException {
         File bd = mkdir("open-existing");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
         long ts = 0x5678;
         append(b, ts, "", 4096);
@@ -80,7 +80,7 @@ public class FileMessageBufferTest {
 
         expect(bd.list(), "0000000000000000-0000000000005678.qdb");
 
-        b = new FileMessageBuffer(bd);
+        b = new PersistentMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
         ts = 0x9abc;
         append(b, ts, "", 4096);
@@ -93,7 +93,7 @@ public class FileMessageBufferTest {
     public void testNextMessageId() throws IOException {
         File bd = mkdir("nextmsg");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd, 0x1234);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 0x1234);
         assertEquals(0x1234L, b.getNextMessageId());
 
         long ts = System.currentTimeMillis();
@@ -101,7 +101,7 @@ public class FileMessageBufferTest {
         assertEquals(0x1334L, b.getNextMessageId());
         b.close();
 
-        b = new FileMessageBuffer(bd);
+        b = new PersistentMessageBuffer(bd);
         assertEquals(0x1334L, b.getNextMessageId());
         b.close();
     }
@@ -110,7 +110,7 @@ public class FileMessageBufferTest {
     public void testMoreThan512Files() throws IOException {
         File bd = mkdir("files512");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
         int ts = 0;
         int n = 513;
@@ -129,7 +129,7 @@ public class FileMessageBufferTest {
         File bd = mkdir("cursor");
         Random rnd = new Random(123);
 
-        FileMessageBuffer b = new FileMessageBuffer(bd, 1000);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
 
         MessageCursor c = b.cursor(0);
@@ -189,7 +189,7 @@ public class FileMessageBufferTest {
         b.close();
     }
 
-    private void seekByIdCheck(FileMessageBuffer b, Msg m) throws IOException {
+    private void seekByIdCheck(PersistentMessageBuffer b, Msg m) throws IOException {
         MessageCursor c = b.cursor(m.id);
         assertNextMsg(m, c);
         c.close();
@@ -198,7 +198,7 @@ public class FileMessageBufferTest {
         c.close();
     }
 
-    private void seekByTimestampCheck(FileMessageBuffer b, Msg m) throws IOException {
+    private void seekByTimestampCheck(PersistentMessageBuffer b, Msg m) throws IOException {
         MessageCursor c = b.cursorByTimestamp(m.timestamp);
         assertNextMsg(m, c);
         c.close();
@@ -216,7 +216,7 @@ public class FileMessageBufferTest {
         assertArrayEquals(msg.payload, c.getPayload());
     }
 
-    private Msg appendFixedSizeMsg(FileMessageBuffer b, long ts, int totalSize, Random rnd) throws IOException {
+    private Msg appendFixedSizeMsg(PersistentMessageBuffer b, long ts, int totalSize, Random rnd) throws IOException {
         String key = "key" + ts;
         byte[] payload = new byte[totalSize - 15 - key.length()];
         rnd.nextBytes(payload);
@@ -233,7 +233,7 @@ public class FileMessageBufferTest {
         }
     }
 
-    private long append(FileMessageBuffer b, long timestamp, String key, int len) throws IOException {
+    private long append(PersistentMessageBuffer b, long timestamp, String key, int len) throws IOException {
         byte[] payload = new byte[len - 15 - key.length()];
         return b.append(timestamp, key, ByteBuffer.wrap(payload));
     }
@@ -253,7 +253,7 @@ public class FileMessageBufferTest {
     public void testCleanup() throws IOException {
         File bd = mkdir("cleanup");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
@@ -263,11 +263,11 @@ public class FileMessageBufferTest {
                 "0000000000000000-0000000000000000.qdb", "0000000000002000-0000000000000000.qdb",
                 "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
 
-        b.setMaxBufferSize((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
+        b.setMaxLength((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
         b.cleanup();
         expect(bd.list(), "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
 
-        b.setMaxBufferSize(1);  // can't get rid of last file
+        b.setMaxLength(1);  // can't get rid of last file
         b.cleanup();
         expect(bd.list(), "0000000000006000-0000000000000000.qdb");
 
@@ -278,11 +278,11 @@ public class FileMessageBufferTest {
     public void testAutoCleanup() throws IOException {
         File bd = mkdir("auto-cleanup");
 
-        FileMessageBuffer b = new FileMessageBuffer(bd);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
         int maxBufferSize = (8192 + MessageFile.FILE_HEADER_SIZE) * 3;
-        b.setMaxBufferSize(maxBufferSize);
-        assertEquals(maxBufferSize, b.getMaxBufferSize());
+        b.setMaxLength(maxBufferSize);
+        assertEquals(maxBufferSize, b.getMaxLength());
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);

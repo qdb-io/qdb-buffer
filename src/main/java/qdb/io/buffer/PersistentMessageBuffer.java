@@ -12,11 +12,11 @@ import java.util.concurrent.Executor;
  * [id of first message in hex, 16 digits]-[timestamp of first message in hex, 16 digits].qdb so that they sort
  * in message id order.</p>
  */
-public class FileMessageBuffer implements MessageBuffer {
+public class PersistentMessageBuffer implements MessageBuffer {
 
     private final File dir;
 
-    private long maxBufferSize = Long.MAX_VALUE;
+    private long maxLength;
     private int maxFileSize = 100 * 1024 * 1024;    // 100 MB
 
     private long[] files;           // first message ID stored in each file (from filename)
@@ -37,11 +37,11 @@ public class FileMessageBuffer implements MessageBuffer {
         }
     };
 
-    public FileMessageBuffer(File dir) throws IOException {
+    public PersistentMessageBuffer(File dir) throws IOException {
         this(dir, 0L);
     }
 
-    public FileMessageBuffer(File dir, long firstMessageId) throws IOException {
+    public PersistentMessageBuffer(File dir, long firstMessageId) throws IOException {
         if (!dir.exists()) {
             if (!dir.mkdir()) {
                 throw new IOException("Directory [" + dir + "] does not exist and could not be created");
@@ -82,16 +82,15 @@ public class FileMessageBuffer implements MessageBuffer {
         }
     }
 
-    /**
-     * Set the maximum size of this buffer in bytes. When it is full the oldest messages are deleted to make space.
-     * Use zero for unlimited size.
-     */
-    public void setMaxBufferSize(long maxBufferSize) {
-        this.maxBufferSize = maxBufferSize;
+    @Override
+    public void setMaxLength(long bytes) throws IOException {
+        this.maxLength = bytes;
+        cleanup();
     }
 
-    public long getMaxBufferSize() {
-        return maxBufferSize;
+    @Override
+    public long getMaxLength() {
+        return maxLength;
     }
 
     public int getMaxFileSize() {
@@ -130,9 +129,7 @@ public class FileMessageBuffer implements MessageBuffer {
         this.maxFileSize = maxFileSize;
     }
 
-    /**
-     * How much space is this buffer currently consuming in bytes?
-     */
+    @Override
     public synchronized long getLength() {
         int c = lastFile - firstFile;
         if (c == 0) return 0L;
@@ -168,7 +165,7 @@ public class FileMessageBuffer implements MessageBuffer {
             files[lastFile++] = firstMessageId;
             id = current.append(timestamp, routingKey, payload);
             if (id < 0) {
-                throw new IllegalArgumentException("Message is too long, max size is approximately " + maxBufferSize +
+                throw new IllegalArgumentException("Message is too long, max size is approximately " + maxFileSize +
                         " bytes");
             }
             if (cleanupExecutor != null) {
@@ -200,13 +197,14 @@ public class FileMessageBuffer implements MessageBuffer {
     }
 
     /**
-     * If this buffer is exceeding its maximum capacity then delete the oldest file(s) until it is under the limit.
+     * If this buffer is exceeding its maximum capacity then delete some of the the oldest files until it is under
+     * the limit.
      */
     public void cleanup() throws IOException {
         for (;;) {
             File doomed;
             synchronized (this) {
-                if (maxBufferSize == 0 || getLength() <= maxBufferSize || firstFile >= lastFile - 1) return;
+                if (maxLength == 0 || getLength() <= maxLength || firstFile >= lastFile - 1) return;
                 doomed = getFile(firstFile);
                 ++firstFile;
                 // todo what about cursors that might have doomed open?
