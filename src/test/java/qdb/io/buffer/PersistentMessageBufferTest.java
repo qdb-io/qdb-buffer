@@ -1,5 +1,6 @@
 package qdb.io.buffer;
 
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -13,6 +14,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNull;
 
 public class PersistentMessageBufferTest {
 
@@ -321,6 +323,49 @@ public class PersistentMessageBufferTest {
         b.sync();
         assertEquals(4096 + 8192, getStoredLength(first));
         b.close();
+    }
+
+    @Test
+    public void testTimeline() throws IOException {
+        File bd = mkdir("timeline");
+
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
+        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        assertNull(b.getTimeline());
+
+        long ts = 200000;
+        append(b, ts + 0, "", 8192);
+
+        Timeline t = b.getTimeline();
+        assertEquals(2, t.size());
+        checkTimeline(t, 0, 1000, ts, 8192, 0, 0);
+        checkTimeline(t, 1, 9192, ts, 0, 0, 0);
+
+        // repeat test on newly opened buffer
+        b.close();
+        b = new PersistentMessageBuffer(bd);
+        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        t = b.getTimeline();
+        assertEquals(2, t.size());
+        checkTimeline(t, 0, 1000, ts, 8192, 0, 0);
+        checkTimeline(t, 1, 9192, ts, 0, 0, 0);
+
+        append(b, ts + 2000, "", 8192);
+        t = b.getTimeline();
+        assertEquals(3, t.size());
+        checkTimeline(t, 0, 1000,  ts,          8192, 0, 2000);
+        checkTimeline(t, 1, 9192,  ts + 2000,   8192, 0, 0);
+        checkTimeline(t, 2, 17384, ts + 2000,   0,    0, 0);
+
+        b.close();
+    }
+
+    private void checkTimeline(Timeline t, int i, long messageId, long ts, int bytes, int count, long millis) {
+        assertEquals(messageId, t.getMessageId(i));
+        assertEquals(ts, t.getTimestamp(i));
+        assertEquals(bytes, t.getBytes(i));
+        assertEquals(count, t.getCount(i));
+        assertEquals(millis, t.getMillis(i));
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")

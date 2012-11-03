@@ -151,8 +151,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], maxFileSize);
                 ++lastFile;
             } else {
-                long firstMessageId = files[lastFile - 1];
-                current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
+                ensureCurrent();
             }
         }
         long id = current.append(timestamp, routingKey, payload);
@@ -175,6 +174,13 @@ public class PersistentMessageBuffer implements MessageBuffer {
             }
         }
         return id;
+    }
+
+    private void ensureCurrent() throws IOException {
+        if (current == null) {
+            long firstMessageId = files[lastFile - 1];
+            current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
+        }
     }
 
     /**
@@ -250,11 +256,61 @@ public class PersistentMessageBuffer implements MessageBuffer {
         if (lastFile == 0) {
             return files[lastFile];  // empty buffer
         }
-        if (current == null) {
-            long firstMessageId = files[lastFile - 1];
-            current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1]), firstMessageId);
-        }
+        ensureCurrent();
         return current.getNextMessageId();
+    }
+
+    @Override
+    public synchronized Timeline getTimeline() throws IOException {
+        int n = lastFile - firstFile;
+        if (n == 0) return null;    // buffer is empty
+        TopTimeline ans = new TopTimeline(n + 1);
+        System.arraycopy(this.files, firstFile, ans.files, 0, n);
+        System.arraycopy(this.timestamps, firstFile, ans.timestamps, 0, n);
+        ensureCurrent();
+        ans.files[n] = current.getNextMessageId();
+        long mrt = current.getMostRecentTimestamp();
+        ans.timestamps[n] = mrt == 0 ? ans.timestamps[n - 1] : mrt;
+        return ans;
+    }
+
+    static class TopTimeline implements Timeline {
+
+        private long[] files, timestamps;
+
+        TopTimeline(int n) {
+            files = new long[n];
+            timestamps = new long[n];
+        }
+
+        public int size() {
+            return files.length;
+        }
+
+        public long getMessageId(int i) {
+            return files[i];
+        }
+
+        public long getTimestamp(int i) {
+            return timestamps[i];
+        }
+
+        public int getBytes(int i) {
+            return i == files.length - 1 ? 0 : (int)(files[i + 1] - files[i]);
+        }
+
+        public long getMillis(int i) {
+            return i == files.length - 1 ? 0L : timestamps[i + 1] - timestamps[i];
+        }
+
+        public long getCount(int i) {
+            return 0;
+        }
+    }
+
+    @Override
+    public Timeline getTimeline(long messageId) throws IOException {
+        return null;
     }
 
     @Override

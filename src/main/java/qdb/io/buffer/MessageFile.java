@@ -61,6 +61,7 @@ class MessageFile implements Closeable {
 
     private int length;
     private int lastCheckpointLength;
+    private long mostRecentTimestamp;
 
     private final int bytesPerBucket;
     private int bucketIndex;
@@ -137,7 +138,7 @@ class MessageFile implements Closeable {
             }
             lastCheckpointLength = length;
 
-            for (bucketIndex = 1; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex++)) != 0; );
+            for (bucketIndex = 0; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex++)) != 0; );
 
             fileHeader.position(bucketPosition(--bucketIndex));
             bucketMessageId = fileHeader.getInt();
@@ -145,7 +146,7 @@ class MessageFile implements Closeable {
             bucketCount = fileHeader.getInt();
         }
 
-        bytesPerBucket = (maxFileSize - FILE_HEADER_SIZE) / MAX_BUCKETS;
+        bytesPerBucket = (this.maxFileSize - FILE_HEADER_SIZE) / MAX_BUCKETS;
     }
 
     private int bucketPosition(int i) {
@@ -160,7 +161,9 @@ class MessageFile implements Closeable {
      * What ID will the next message appended have, assuming there is space for it?
      */
     public long getNextMessageId() {
-        return firstMessageId + length - FILE_HEADER_SIZE;
+        synchronized (channel) {
+            return firstMessageId + length - FILE_HEADER_SIZE;
+        }
     }
 
     /**
@@ -206,6 +209,7 @@ class MessageFile implements Closeable {
                 ++bucketCount;
             }
 
+            mostRecentTimestamp = timestamp;
             return firstMessageId + id;
         }
     }
@@ -219,7 +223,7 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * How big is this file in bytes?
+     * How big is this file in bytes? Note that this is the total length of the file including the header.
      */
     public int length() {
         synchronized (channel) {
@@ -281,6 +285,23 @@ class MessageFile implements Closeable {
     @Override
     public String toString() {
         return "MessageFile[" + file + "] firstMessageId " + firstMessageId + " length " + length;
+    }
+
+    /**
+     * Get the timestamp of the message most recently appended to this file or 0 if it is empty.
+     */
+    public long getMostRecentTimestamp() throws IOException {
+        synchronized (channel) {
+            if (mostRecentTimestamp == 0 && length > FILE_HEADER_SIZE) {
+                MessageCursor c = cursor(getBucket(getBucketCount() - 1).getFirstMessageId());
+                try {
+                    while (c.next()) mostRecentTimestamp = c.getTimestamp();
+                } finally {
+                    c.close();
+                }
+            }
+            return mostRecentTimestamp;
+        }
     }
 
     /**

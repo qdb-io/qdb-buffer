@@ -49,11 +49,23 @@ public interface MessageBuffer extends Closeable {
     /**
      * How much space is this buffer currently consuming in bytes?
      */
-    long getLength();
+    long getLength() throws IOException;
 
     /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in
      * any loss of messages.
      */
     void sync() throws IOException;
+
+    /**
+     * Get a snapshot of the high level timeline for this buffer. Note that if the buffer is empty null is returned.
+     */
+    Timeline getTimeline() throws IOException;
+
+    /**
+     * Get the detailed timeline from approximately messageId onwards in the buffer or null if this is not available
+     * (e.g. the message has been deleted).
+     */
+    Timeline getTimeline(long messageId) throws IOException;
+
 }

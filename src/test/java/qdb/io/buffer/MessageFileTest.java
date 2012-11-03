@@ -412,6 +412,24 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testMostRecentTimestamp() throws IOException {
+        File file = new File(dir, "most-recent-timestamp");
+        file.delete();
+
+        MessageFile mf = new MessageFile(file, 1000, 1000000);
+        assertEquals(0L, mf.getMostRecentTimestamp());
+
+        mf.append(123L, "", ByteBuffer.wrap(new byte[0]));
+        assertEquals(123L, mf.getMostRecentTimestamp());
+
+        mf.close();
+
+        mf = new MessageFile(file, 1000);
+        assertEquals(123L, mf.getMostRecentTimestamp());
+        mf.close();
+    }
+
+    @Test
     public void testPerformance() throws IOException {
         if (System.getProperty("perf") == null) {
             System.out.println("Skipping testPerformance, run with -Dperf=true to enable");
