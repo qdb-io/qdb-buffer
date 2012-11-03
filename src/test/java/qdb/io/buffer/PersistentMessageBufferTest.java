@@ -310,4 +310,28 @@ public class PersistentMessageBufferTest {
         }
     }
 
+    @Test
+    public void testSync() throws IOException {
+        File bd = mkdir("sync");
+        File first = new File(bd, "0000000000000000-0000000000000000.qdb");
+
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        append(b, 0, "", 8192);
+        assertEquals(0, getStoredLength(first));
+        b.sync();
+        assertEquals(4096 + 8192, getStoredLength(first));
+        b.close();
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private int getStoredLength(File file) throws IOException {
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        try {
+            in.skip(8); // length is at position 8 in the file
+            return in.readInt();
+        } finally {
+            in.close();
+        }
+    }
+
 }

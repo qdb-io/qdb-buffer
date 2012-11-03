@@ -50,4 +50,10 @@ public interface MessageBuffer extends Closeable {
      * How much space is this buffer currently consuming in bytes?
      */
     long getLength();
+
+    /**
+     * Sync all changes to persistent storage. A system crash immediately following this call will not result in
+     * any loss of messages.
+     */
+    void sync() throws IOException;
 }

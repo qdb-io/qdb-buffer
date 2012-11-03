@@ -99,7 +99,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     /**
      * Provide an executor (e.g. thread pool) to do cleanup's asynchronously when the buffer starts a new message
-     * file. If no executor is set then cleanups are done synchronously.
+     * file. If no executor is set then cleanups are done synchronously i.e. on the thread appending the message.
      */
     public void setCleanupExecutor(Executor cleanupExecutor) {
         this.cleanupExecutor = cleanupExecutor;
@@ -212,6 +212,13 @@ public class PersistentMessageBuffer implements MessageBuffer {
             if (!doomed.delete()) {
                 throw new IOException("Unable to delete [" + doomed + "]");
             }
+        }
+    }
+
+    @Override
+    public synchronized void sync() throws IOException {
+        if (current != null) {
+            current.checkpoint(true);
         }
     }
 
