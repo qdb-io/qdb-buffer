@@ -288,6 +288,35 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testTimeline() throws IOException {
+        File file = new File(dir, "timeline.qdb");
+        file.delete();
+
+        int maxBuckets = 340;
+
+        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // will be used
+        MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
+
+        byte[] msg = new byte[100];
+        long ts = (System.currentTimeMillis() / 1000L) * 1000L;
+        for (int i = 0; i < maxBuckets * 2; i++) {
+            mf.append(ts + i * 1000, "", ByteBuffer.wrap(msg));
+        }
+
+        Timeline t = mf.getTimeline();
+        for (int i = 0; i < t.size(); i++) {
+            String m = "timeline[" + i + "]";
+            assertEquals(m, 1000 + i * (100 + 15) * 2, t.getMessageId(i));
+            assertEquals(m, ts + i * 2000, t.getTimestamp(i));
+            assertEquals(m, i == 339 ? 1000 : 2000, t.getMillis(i));
+            assertEquals(m, 2, t.getCount(i));
+            assertEquals(m, (100 + 15) * 2, t.getBytes(i));
+        }
+        mf.close();
+    }
+
+    @Test
     public void testReadBetweenMessages() throws IOException {
         File file = new File(dir, "read-between-messages.qdb");
         file.delete();

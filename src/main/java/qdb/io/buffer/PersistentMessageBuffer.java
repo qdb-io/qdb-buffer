@@ -309,17 +309,33 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public Timeline getTimeline(long messageId) throws IOException {
-        return null;
+    public synchronized Timeline getTimeline(long messageId) throws IOException {
+        int i = findFileIndex(messageId);
+        if (i < 0) return null;
+        MessageFile mf = getMessageFileForCursor(i);
+        try {
+            return mf.getTimeline();
+        } finally {
+            mf.close();
+        }
     }
 
     @Override
     public String toString() {
-        return "FileMessageBuffer[" + dir + "]";
+        return "PersistentMessageBuffer[" + dir + "]";
     }
 
     @Override
     public MessageCursor cursor(long messageId) throws IOException {
+        int i = findFileIndex(messageId);
+        if (i < 0) return new EmptyCursor();
+        MessageFile mf = getMessageFileForCursor(i);
+        long first = mf.getFirstMessageId();
+        if (messageId < first) messageId = first;
+        return new Cursor(i, mf, mf.cursor(messageId));
+    }
+
+    private int findFileIndex(long messageId) throws IOException {
         if (messageId < 0) {
             throw new IllegalArgumentException("Invalid messageId " + messageId + ", " + this);
         }
@@ -331,7 +347,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         int i;
         synchronized (this) {
             if (lastFile == firstFile) {
-                return new EmptyCursor();
+                return -1;
             }
             long firstMessageId = files[firstFile];
             if (messageId < firstMessageId) {
@@ -343,9 +359,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 i = -(i + 2); // return position before the insertion index if we didn't get a match
             }
         }
-
-        MessageFile mf = getMessageFileForCursor(i);
-        return new Cursor(i, mf, mf.cursor(messageId));
+        return i;
     }
 
     @Override

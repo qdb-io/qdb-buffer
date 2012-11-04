@@ -304,6 +304,61 @@ class MessageFile implements Closeable {
         }
     }
 
+    public Timeline getTimeline() throws IOException {
+        synchronized (channel) {
+            TimelineImpl ans = new TimelineImpl(firstMessageId, bucketIndex);
+            fileHeader.position(bucketPosition(0));
+            for (int i = 0; i < bucketIndex; i++) {
+                ans.ids[i] = fileHeader.getInt();
+                ans.times[i] = fileHeader.getInt();
+                ans.counts[i] = fileHeader.getInt();
+            }
+            ans.ids[bucketIndex] = bucketMessageId;
+            ans.times[bucketIndex] = bucketTime;
+            ans.counts[bucketIndex] = bucketCount;
+            ans.ids[bucketIndex + 1] = (int)(getNextMessageId() - firstMessageId);
+            ans.times[bucketIndex + 1] = (int)(getMostRecentTimestamp() / 1000L);
+            return ans;
+        }
+    }
+
+    static class TimelineImpl implements Timeline {
+
+        private long firstMessageId;
+        private int[] ids, times, counts;
+
+        TimelineImpl(long firstMessageId, int bucketIndex) {
+            this.firstMessageId = firstMessageId;
+            ids = new int[bucketIndex + 2];
+            times = new int[bucketIndex + 2];
+            counts = new int[bucketIndex + 1];
+        }
+
+        public int size() {
+            return ids.length - 1;
+        }
+
+        public long getMessageId(int i) {
+            return ids[i] + firstMessageId;
+        }
+
+        public long getTimestamp(int i) {
+            return times[i] * 1000L;
+        }
+
+        public int getBytes(int i) {
+            return ids[i + 1] - ids[i];
+        }
+
+        public long getMillis(int i) {
+            return (times[i + 1] - times[i]) * 1000L;
+        }
+
+        public long getCount(int i) {
+            return counts[i];
+        }
+    }
+
     /**
      * How many histogram buckets are there?
      */
