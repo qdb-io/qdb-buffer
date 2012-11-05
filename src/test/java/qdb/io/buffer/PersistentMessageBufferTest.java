@@ -350,12 +350,22 @@ public class PersistentMessageBufferTest {
         checkTimeline(t, 0, 1000, ts, 8192, 0, 0);
         checkTimeline(t, 1, 9192, ts, 0, 0, 0);
 
-        append(b, ts + 2000, "", 8192);
+        append(b, ts + 2000, "", 2048);
+        append(b, ts + 3000, "", 2048);
+        append(b, ts + 4000, "", 2048);
+        append(b, ts + 5000, "", 2048);
         t = b.getTimeline();
         assertEquals(3, t.size());
         checkTimeline(t, 0, 1000,  ts,          8192, 0, 2000);
-        checkTimeline(t, 1, 9192,  ts + 2000,   8192, 0, 0);
-        checkTimeline(t, 2, 17384, ts + 2000,   0,    0, 0);
+        checkTimeline(t, 1, 9192,  ts + 2000,   8192, 0, 3000);
+        checkTimeline(t, 2, 17384, ts + 5000,   0,    0, 0);
+
+        t = b.getTimeline(9192);
+        assertEquals(4, t.size());
+        checkTimeline(t, 0, 9192,          ts + 2000,   2048, 1, 1000);
+        checkTimeline(t, 1, 9192 + 2048,   ts + 3000,   2048, 1, 1000);
+        checkTimeline(t, 2, 9192 + 2048*2, ts + 4000,   2048, 1, 1000);
+        checkTimeline(t, 3, 9192 + 2048*3, ts + 5000,   2048, 1, 0);
 
         b.close();
     }
