@@ -75,10 +75,10 @@ public class MessageFileTest {
         assertEquals(0, ins.readInt());                 // reserved
 
         assertEquals(0, ins.readInt());                 // bucket first message id (relative to file)
-        assertEquals((int)(ts0 / 1000), ins.readInt()); // bucket time
+        assertEquals(ts0, ins.readLong());              // bucket timestamp
         assertEquals(2, ins.readInt());                 // bucket count
 
-        for (int i = 16 + 12; i < 4096; i++) {
+        for (int i = 16 + 16; i < 4096; i++) {
             byte b = ins.readByte();
             assertEquals("Byte at " + i + " is not zero (0x" + Integer.toHexString(b) + ")", (byte)0, b);
         }
@@ -217,9 +217,9 @@ public class MessageFileTest {
         File file = new File(dir, "histogram-write.qdb");
         file.delete();
 
-        int maxBuckets = 340;
+        int maxBuckets = 255;
 
-        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // file is big enough for 2 * 255 messages each 100 bytes so there will be 2 per bucket and all buckets
         // will be used
         MessageFile mf = new MessageFile(file, 0, 4096 + 2 * maxBuckets * (100 + 15));
 
@@ -242,7 +242,7 @@ public class MessageFileTest {
 
         for (int i = 0; i < maxBuckets; i++) {
             assertEquals(i * (100 + 15) * 2, ins.readInt());
-            assertEquals(ts/1000 + i * 2, ins.readInt());
+            assertEquals(ts + i * 2000, ins.readLong());
             assertEquals(2, ins.readInt());
         }
         ins.close();
@@ -253,9 +253,9 @@ public class MessageFileTest {
         File file = new File(dir, "histogram-read.qdb");
         file.delete();
 
-        int maxBuckets = 340;
+        int maxBuckets = 255;
 
-        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // file is big enough for 2 * 255 messages each 100 bytes so there will be 2 per bucket and all buckets
         // will be used
         MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
 
@@ -269,7 +269,7 @@ public class MessageFileTest {
             MessageFile.Bucket b = mf.getBucket(i);
             String m = "bucket[" + i + "]";
             assertEquals(m, 1000 + i * (100 + 15) * 2, b.getFirstMessageId());
-            assertEquals(m, ts/1000 + i * 2, b.getTime());
+            assertEquals(m, ts + i * 2000, b.getTimestamp());
             assertEquals(m, 2, b.getCount());
             assertEquals(m, (100 + 15) * 2, b.getSize());
         }
@@ -314,9 +314,9 @@ public class MessageFileTest {
         File file = new File(dir, "timeline.qdb");
         file.delete();
 
-        int maxBuckets = 340;
+        int maxBuckets = 255;
 
-        // file is big enough for 2 * 340 messages each 100 bytes so there will be 2 per bucket and all buckets
+        // file is big enough for 2 * 255 messages each 100 bytes so there will be 2 per bucket and all buckets
         // will be used
         MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
 
@@ -331,7 +331,7 @@ public class MessageFileTest {
             String m = "timeline[" + i + "]";
             assertEquals(m, 1000 + i * (100 + 15) * 2, t.getMessageId(i));
             assertEquals(m, ts + i * 2000, t.getTimestamp(i));
-            assertEquals(m, i == 339 ? 1000 : 2000, t.getMillis(i));
+            assertEquals(m, i == maxBuckets - 1 ? 1000 : 2000, t.getMillis(i));
             assertEquals(m, 2, t.getCount(i));
             assertEquals(m, (100 + 15) * 2, t.getBytes(i));
         }

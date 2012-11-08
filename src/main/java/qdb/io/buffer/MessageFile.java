@@ -18,7 +18,6 @@ package qdb.io.buffer;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
@@ -43,16 +42,16 @@ import java.nio.charset.Charset;
  * message CRC values for example). The assumption is that if the messages are very important they will be
  * written to multiple machines.</p>
  *
- * <p>The rest of the file header consists of up to 340 histogram buckets for fast message lookup by timestamp
+ * <p>The rest of the file header consists of up to 255 histogram buckets for fast message lookup by timestamp
  * and id:</p>
  * <pre>
  * first message id (relative to this file): 4 bytes
- * timestamp in unix time: 4 bytes
+ * timestamp: 8 bytes
  * message count: 4 bytes
  * </pre>
  *
  * <p>The histogram is updated at each checkpoint. Checkpoints are done manually or automatically every max file
- * size / 340 bytes.</p>
+ * size / 255 bytes.</p>
  *
  * <p>The remainder of the file consists of records in the following format (all BIG_ENDIAN):</p>
  *
@@ -74,7 +73,6 @@ class MessageFile implements Closeable {
     private final FileChannel channel;
     private final ByteBuffer fileHeader;
     private final ByteBuffer header;
-    private final ByteBuffer[] srcs = new ByteBuffer[2];
     private int usageCounter = 1;
 
     private int length;
@@ -83,13 +81,13 @@ class MessageFile implements Closeable {
 
     private final int bytesPerBucket;
     private int bucketIndex;
-    private int bucketTime;
+    private long bucketTimestamp;
     private int bucketMessageId;
     private int bucketCount;
 
     public static final int FILE_HEADER_SIZE = 4096;
     private static final int FILE_HEADER_FIXED_SIZE = 16;
-    private static final int BUCKET_RECORD_SIZE = 12;
+    private static final int BUCKET_RECORD_SIZE = 16;
     private static final int MAX_BUCKETS = (FILE_HEADER_SIZE - FILE_HEADER_FIXED_SIZE) / BUCKET_RECORD_SIZE;
 
     private static final short FILE_MAGIC = (short)0xBE01;
@@ -124,7 +122,6 @@ class MessageFile implements Closeable {
         channel = raf.getChannel();
         fileHeader = ByteBuffer.allocateDirect(FILE_HEADER_SIZE);
         header = ByteBuffer.allocateDirect(1024);
-        srcs[0] = header;
 
         int size = (int)channel.size();
         if (size == 0) {
@@ -160,7 +157,7 @@ class MessageFile implements Closeable {
 
             fileHeader.position(bucketPosition(--bucketIndex));
             bucketMessageId = fileHeader.getInt();
-            bucketTime = fileHeader.getInt();
+            bucketTimestamp = fileHeader.getLong();
             bucketCount = fileHeader.getInt();
         }
 
@@ -223,7 +220,7 @@ class MessageFile implements Closeable {
                     bucketIndex = 0;
                 }
                 bucketMessageId = id;
-                bucketTime = (int)(timestamp / 1000);
+                bucketTimestamp = timestamp;
                 bucketCount = 1;
             } else {
                 ++bucketCount;
@@ -237,7 +234,7 @@ class MessageFile implements Closeable {
     private void putBucketDataInFileHeader() {
         fileHeader.position(bucketPosition(bucketIndex));
         fileHeader.putInt(bucketMessageId);
-        fileHeader.putInt(bucketTime);
+        fileHeader.putLong(bucketTimestamp);
         fileHeader.putInt(bucketCount);
         // data will be written at the next checkpoint
     }
@@ -330,14 +327,14 @@ class MessageFile implements Closeable {
             fileHeader.position(bucketPosition(0));
             for (int i = 0; i < bucketIndex; i++) {
                 ans.ids[i] = fileHeader.getInt();
-                ans.times[i] = fileHeader.getInt();
+                ans.timestamps[i] = fileHeader.getLong();
                 ans.counts[i] = fileHeader.getInt();
             }
             ans.ids[bucketIndex] = bucketMessageId;
-            ans.times[bucketIndex] = bucketTime;
+            ans.timestamps[bucketIndex] = bucketTimestamp;
             ans.counts[bucketIndex] = bucketCount;
             ans.ids[bucketIndex + 1] = (int)(getNextMessageId() - firstMessageId);
-            ans.times[bucketIndex + 1] = (int)(getMostRecentTimestamp() / 1000L);
+            ans.timestamps[bucketIndex + 1] = getMostRecentTimestamp();
             return ans;
         }
     }
@@ -345,12 +342,13 @@ class MessageFile implements Closeable {
     static class TimelineImpl implements Timeline {
 
         private long firstMessageId;
-        private int[] ids, times, counts;
+        private int[] ids, counts;
+        private long[] timestamps;
 
         TimelineImpl(long firstMessageId, int bucketIndex) {
             this.firstMessageId = firstMessageId;
             ids = new int[bucketIndex + 2];
-            times = new int[bucketIndex + 2];
+            this.timestamps = new long[bucketIndex + 2];
             counts = new int[bucketIndex + 1];
         }
 
@@ -363,7 +361,7 @@ class MessageFile implements Closeable {
         }
 
         public long getTimestamp(int i) {
-            return times[i] * 1000L;
+            return this.timestamps[i];
         }
 
         public int getBytes(int i) {
@@ -371,7 +369,7 @@ class MessageFile implements Closeable {
         }
 
         public long getMillis(int i) {
-            return (times[i + 1] - times[i]) * 1000L;
+            return this.timestamps[i + 1] - this.timestamps[i];
         }
 
         public long getCount(int i) {
@@ -397,12 +395,12 @@ class MessageFile implements Closeable {
                 throw new IllegalArgumentException("index " + i + " out of range (0 to " + bucketIndex + ")");
             }
             if (i == bucketIndex) {
-                return new Bucket(firstMessageId + bucketMessageId, bucketTime, bucketCount,
+                return new Bucket(firstMessageId + bucketMessageId, bucketTimestamp, bucketCount,
                         (length - FILE_HEADER_SIZE) - bucketMessageId);
             }
             fileHeader.position(bucketPosition(i));
             int id = fileHeader.getInt();
-            return new Bucket(firstMessageId + id, fileHeader.getInt(), fileHeader.getInt(),
+            return new Bucket(firstMessageId + id, fileHeader.getLong(), fileHeader.getInt(),
                     (i == bucketIndex - 1 ? bucketMessageId : fileHeader.getInt()) - id);
         }
     }
@@ -434,15 +432,14 @@ class MessageFile implements Closeable {
      */
     public int findBucketByTimestamp(long timestamp) throws IOException {
         synchronized (channel) {
-            int key = (int)(timestamp / 1000);
-            if (key >= bucketTime) return bucketIndex; // last bucket
+            if (timestamp >= bucketTimestamp) return bucketIndex; // last bucket
             int low = 0;
             int high = bucketIndex - 1;
             while (low <= high) {
                 int mid = (low + high) >>> 1;
-                int midVal = fileHeader.getInt(bucketPosition(mid) + 4);
-                if (midVal < key) low = mid + 1;
-                else if (midVal > key) high = mid - 1;
+                long midVal = fileHeader.getLong(bucketPosition(mid) + 4);
+                if (midVal < timestamp) low = mid + 1;
+                else if (midVal > timestamp) high = mid - 1;
                 else return mid;
             }
             return low - 1;
@@ -452,22 +449,22 @@ class MessageFile implements Closeable {
     public static class Bucket {
 
         private final long firstMessageId;
-        private final int time;
+        private final long timestamp;
         private final int count;
         private final int size;
 
-        public Bucket(long firstMessageId, int time, int count, int size) {
+        public Bucket(long firstMessageId, long timestamp, int count, int size) {
             this.firstMessageId = firstMessageId;
-            this.time = time;
+            this.timestamp = timestamp;
             this.count = count;
             this.size = size;
         }
 
         /**
-         * Get the unix time of the first message in the bucket. This is the timestamp of the message / 1000.
+         * Get the timestamp of the first message in the bucket.
          */
-        public int getTime() {
-            return time;
+        public long getTimestamp() {
+            return timestamp;
         }
 
         /**
@@ -493,7 +490,7 @@ class MessageFile implements Closeable {
 
         @Override
         public String toString() {
-            return "Bucket{firstMessageId=" + firstMessageId + ", time=" + time + ", count=" + count +
+            return "Bucket{firstMessageId=" + firstMessageId + ", timestamp=" + timestamp + ", count=" + count +
                     ", size=" + size + '}';
         }
     }
@@ -531,11 +528,10 @@ class MessageFile implements Closeable {
         if (i < 0) return new Cursor(firstMessageId);
 
         // the first message with timestamp >= the time we are looking for may be in a previous bucket because
-        // the bucket timestamp resolution is only seconds so go back until we get a change in time .. that way we
+        // the bucket timestamp resolution is only ms so go back until we get a change in time .. that way we
         // are sure to find it
-        int time = (int)(timestamp / 1000);
         Bucket b = getBucket(i);
-        for (; b.getTime() == time && i > 0; b = getBucket(--i));
+        for (; b.getTimestamp() == timestamp && i > 0; b = getBucket(--i));
 
         Cursor c = new Cursor(getBucket(i).getFirstMessageId());
         for (; c.next(); ) {    // skip messages until we get one >= timestamp
