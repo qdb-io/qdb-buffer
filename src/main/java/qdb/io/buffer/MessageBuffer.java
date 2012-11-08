@@ -53,7 +53,6 @@ public interface MessageBuffer extends Closeable {
 
     /**
      * Set the maximum size of this buffer in bytes. When it is full the oldest messages are deleted to make space.
-     * Use zero for unlimited size.
      */
     void setMaxLength(long bytes) throws IOException;
 
@@ -61,6 +60,17 @@ public interface MessageBuffer extends Closeable {
      * What is the maximum size of this buffer in bytes?
      */
     long getMaxLength();
+
+    /**
+     * What is the maximum size of a message payload in bytes? Set to 0 for the default of approximately
+     * {@link #getMaxLength()} / 1000.
+     */
+    void setMaxPayloadSize(int maxPayloadSize);
+
+    /**
+     * What is the maximum size of a message payload in bytes?
+     */
+    int getMaxPayloadSize();
 
     /**
      * How much space is this buffer currently consuming in bytes?

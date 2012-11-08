@@ -16,7 +16,6 @@
 
 package qdb.io.buffer;
 
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -47,10 +46,10 @@ public class PersistentMessageBufferTest {
     public void testAppend() throws IOException {
         PersistentMessageBuffer b = new PersistentMessageBuffer(mkdir("append"));
         assertTrue(b.toString().contains("append"));
-        b.setMaxFileSize(10000 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(10000 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(0, b.getFileCount());
         assertEquals(0L, b.getLength());
-        assertEquals(10000 + MessageFile.FILE_HEADER_SIZE, b.getMaxFileSize());
+        assertEquals(10000 + MessageFile.FILE_HEADER_SIZE, b.getSegmentLength());
 
         long ts = System.currentTimeMillis();
         assertEquals(0L, append(b, ts, "", 5000));
@@ -90,7 +89,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("open-existing");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         long ts = 0x5678;
         append(b, ts, "", 4096);
         append(b, ts, "", 4096);
@@ -99,7 +98,7 @@ public class PersistentMessageBufferTest {
         expect(bd.list(), "0000000000000000-0000000000005678.qdb");
 
         b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         ts = 0x9abc;
         append(b, ts, "", 4096);
         b.close();
@@ -129,7 +128,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("files512");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         int ts = 0;
         int n = 513;
         String[] expect = new String[n];
@@ -148,7 +147,7 @@ public class PersistentMessageBufferTest {
         Random rnd = new Random(123);
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
 
         MessageCursor c = b.cursor(0);
         assertFalse(c.next());
@@ -272,7 +271,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("cleanup");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
@@ -297,7 +296,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("auto-cleanup");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         int maxBufferSize = (8192 + MessageFile.FILE_HEADER_SIZE) * 3;
         b.setMaxLength(maxBufferSize);
         assertEquals(maxBufferSize, b.getMaxLength());
@@ -346,7 +345,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("timeline");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertNull(b.getTimeline());
 
         long ts = 200000;
@@ -360,7 +359,7 @@ public class PersistentMessageBufferTest {
         // repeat test on newly opened buffer
         b.close();
         b = new PersistentMessageBuffer(bd);
-        b.setMaxFileSize(8192 + MessageFile.FILE_HEADER_SIZE);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         t = b.getTimeline();
         assertEquals(2, t.size());
         checkTimeline(t, 0, 1000, ts, 8192, 0, 0);

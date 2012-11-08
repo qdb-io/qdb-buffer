@@ -32,8 +32,10 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private final File dir;
 
-    private long maxLength;
-    private int maxFileSize = 100 * 1024 * 1024;    // 100 MB
+    private long maxLength = 100 * 1000 * 1000000L; // 100 GB
+    private int segmentCount = 1000;
+    private int segmentLength;        // auto
+    private int maxPayloadSize;     // auto
 
     private long[] files;           // first message ID stored in each file (from filename)
     private long[] timestamps;      // timestamp of first message stored in each file (from filename)
@@ -100,6 +102,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public void setMaxLength(long bytes) throws IOException {
+        if (bytes <= 0) throw new IllegalArgumentException("Invalid maxLength " + bytes);
         this.maxLength = bytes;
         cleanup();
     }
@@ -109,8 +112,47 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return maxLength;
     }
 
-    public int getMaxFileSize() {
-        return maxFileSize;
+    /**
+     * How many message segments should the buffer contain when it is full? Note that this value may be ignored
+     * depending on {@link #setMaxPayloadSize(int)} and {@link #setSegmentLength(int)}.
+     */
+    public void setSegmentCount(int segmentCount) {
+        if (segmentCount <= 0) throw new IllegalArgumentException("Invalid segmentCount " + segmentCount);
+        this.segmentCount = segmentCount;
+    }
+
+    public int getSegmentCount() {
+        return segmentCount;
+    }
+
+    @Override
+    public void setMaxPayloadSize(int maxPayloadSize) {
+        if (maxPayloadSize < 0 || maxPayloadSize >= 1000 * 1000000 /*1G*/) {
+            throw new IllegalArgumentException("maxPayloadLength out of range: " + maxPayloadSize);
+        }
+        this.maxPayloadSize = maxPayloadSize;
+    }
+
+    @Override
+    public int getMaxPayloadSize() {
+        if (maxPayloadSize > 0) return maxPayloadSize;
+        return getSegmentLength() - 2048;
+    }
+
+    /**
+     * How big are the individual message segments? Smaller segments provide more granular timeline data but limit
+     * the maximum message size and may impact performance. Use a segment size of 0 for automatic sizing based
+     * on {@link #getMaxLength()}, {@link #getSegmentCount()} and {@link #getMaxPayloadSize()}.
+     */
+    public void setSegmentLength(int segmentLength) {
+        this.segmentLength = segmentLength;
+    }
+
+    public int getSegmentLength() {
+        if (segmentLength > 0) return segmentLength;
+        int ans = (int)Math.min(maxLength / segmentCount, 1000 * 1000000L /*1G*/);
+        ans = Math.max(ans, maxPayloadSize + 2048);
+        return ans;
     }
 
     /**
@@ -137,14 +179,6 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return cleanupExecutor;
     }
 
-    /**
-     * How big are the individual message files? Smaller files provide more granular histogram data but more files
-     * are created on disk.
-     */
-    public void setMaxFileSize(int maxFileSize) {
-        this.maxFileSize = maxFileSize;
-    }
-
     @Override
     public synchronized long getLength() {
         int c = lastFile - firstFile;
@@ -160,11 +194,19 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return lastFile - firstFile;
     }
 
+    @SuppressWarnings("ConstantConditions")
     @Override
     public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
+        int maxLen = getMaxPayloadSize();
+        int payloadLength = payload.limit() - payload.position();
+        if (payloadLength > maxLen) {
+            throw new IllegalArgumentException("Payload size of " + payloadLength + " exceeds max payload size of " +
+                    maxLen);
+        }
+
         if (current == null) {
             if (lastFile == 0) {    // new buffer
-                current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], maxFileSize);
+                current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], getSegmentLength());
                 ++lastFile;
             } else {
                 ensureCurrent();
@@ -175,13 +217,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
             ensureSpaceInFiles();
             long firstMessageId = current.getNextMessageId();
             current.close();
-            current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, maxFileSize);
+            current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, getSegmentLength());
             timestamps[lastFile] = timestamp;
             files[lastFile++] = firstMessageId;
             id = current.append(timestamp, routingKey, payload);
-            if (id < 0) {
-                throw new IllegalArgumentException("Message is too long, max size is approximately " + maxFileSize +
-                        " bytes");
+            if (id < 0) {   // this shouldn't happen
+                throw new IllegalArgumentException("Message is too long?");
             }
             if (cleanupExecutor != null) {
                 cleanupExecutor.execute(cleanupJob);
