@@ -20,7 +20,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -238,7 +237,7 @@ public class PersistentMessageBufferTest {
         byte[] payload = new byte[totalSize - 15 - key.length()];
         rnd.nextBytes(payload);
         Msg msg = new Msg(ts, key, payload);
-        msg.id = b.append(msg.timestamp, msg.routingKey, ByteBuffer.wrap(msg.payload));
+        msg.id = b.append(msg.timestamp, msg.routingKey, msg.payload);
         return msg;
     }
 
@@ -252,7 +251,7 @@ public class PersistentMessageBufferTest {
 
     private long append(PersistentMessageBuffer b, long timestamp, String key, int len) throws IOException {
         byte[] payload = new byte[len - 15 - key.length()];
-        return b.append(timestamp, key, ByteBuffer.wrap(payload));
+        return b.append(timestamp, key, payload);
     }
 
     @SuppressWarnings("ConstantConditions")

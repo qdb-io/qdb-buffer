@@ -16,10 +16,12 @@
 
 package qdb.io.buffer;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
 
@@ -194,13 +196,17 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return lastFile - firstFile;
     }
 
+    @Override
+    public long append(long timestamp, String routingKey, byte[] payload) throws IOException {
+        return append(timestamp, routingKey, Channels.newChannel(new ByteArrayInputStream(payload)), payload.length);
+    }
+
     @SuppressWarnings("ConstantConditions")
     @Override
-    public synchronized long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
+    public long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException {
         int maxLen = getMaxPayloadSize();
-        int payloadLength = payload.limit() - payload.position();
-        if (payloadLength > maxLen) {
-            throw new IllegalArgumentException("Payload size of " + payloadLength + " exceeds max payload size of " +
+        if (payloadSize > maxLen) {
+            throw new IllegalArgumentException("Payload size of " + payloadSize + " exceeds max payload size of " +
                     maxLen);
         }
 
@@ -212,7 +218,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 ensureCurrent();
             }
         }
-        long id = current.append(timestamp, routingKey, payload);
+        long id = current.append(timestamp, routingKey, payload, payloadSize);
         if (id < 0) {
             ensureSpaceInFiles();
             long firstMessageId = current.getNextMessageId();
@@ -220,7 +226,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, getSegmentLength());
             timestamps[lastFile] = timestamp;
             files[lastFile++] = firstMessageId;
-            id = current.append(timestamp, routingKey, payload);
+            id = current.append(timestamp, routingKey, payload, payloadSize);
             if (id < 0) {   // this shouldn't happen
                 throw new IllegalArgumentException("Message is too long?");
             }

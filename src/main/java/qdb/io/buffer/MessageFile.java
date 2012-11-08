@@ -18,7 +18,9 @@ package qdb.io.buffer;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
 
 /**
@@ -186,29 +188,31 @@ class MessageFile implements Closeable {
      * Append a message and return its id (position in the file plus the firstMessageId of the file). Returns
      * -1 if this file is too full for the message.
      */
-    public long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException {
+    public long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException {
         int n = routingKey.length();
         if (n > 255) throw new IllegalArgumentException("Routing key length " + n + " > 255 characters");
 
         byte[] routingKeyBytes = routingKey.getBytes(UTF8);
 
         synchronized (channel) {
-            if (length + MESSAGE_HEADER_SIZE + routingKeyBytes.length + payload.limit() > maxFileSize) return -1;
+            if (length + MESSAGE_HEADER_SIZE + routingKeyBytes.length + payloadSize > maxFileSize) return -1;
 
             header.clear();
             channel.position(length);
             header.put(TYPE_MESSAGE);
             header.putLong(timestamp);
             header.putShort((short)routingKeyBytes.length);
-            header.putInt(payload.limit());
+            header.putInt(payloadSize);
             header.put(routingKeyBytes);
             header.flip();
 
-            srcs[1] = payload;
-            channel.write(srcs);
-
             int id = length - FILE_HEADER_SIZE;
-            length = (int)channel.position(); // update after write so a partial write won't corrupt file
+            channel.write(header);
+            long sz = channel.transferFrom(payload, channel.position(), payloadSize);
+            if (sz != payloadSize) {
+                throw new IOException("Only read " + sz + " bytes from payload channel instead of " + payloadSize);
+            }
+            length = (int)channel.position() + payloadSize; // update after write so a partial write won't corrupt file
 
             // see if we need to start a new histogram bucket
             if (bucketIndex < 0 || ((id - bucketMessageId >= bytesPerBucket) && bucketIndex < MAX_BUCKETS - 1)) {

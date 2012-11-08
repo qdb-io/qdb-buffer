@@ -19,6 +19,7 @@ package qdb.io.buffer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 
 /**
  * Queue that supports sequential retrieval of old messages by id and timestamp.
@@ -28,7 +29,12 @@ public interface MessageBuffer extends Closeable {
     /**
      * Append a message and return its id.
      */
-    long append(long timestamp, String routingKey, ByteBuffer payload) throws IOException;
+    long append(long timestamp, String routingKey, byte[] payload) throws IOException;
+
+    /**
+     * Append a message and return its id.
+     */
+    long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException;
 
     /**
      * What ID will the next message appended have?

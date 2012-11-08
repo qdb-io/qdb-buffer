@@ -20,8 +20,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
-import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -41,14 +43,10 @@ public class MessageFileTest {
 
     @Test
     public void testAppend() throws IOException {
-        File file = new File(dir, "append.qdb");
+        File file = new File(dir, "append-from-channel.qdb");
         file.delete();
 
         MessageFile mf = new MessageFile(file, 1000L, 1000000);
-        assertEquals(4096, mf.length());
-
-        assertEquals(1000L, mf.getFirstMessageId());
-        assertEquals(1000L, mf.getNextMessageId());
 
         long ts0 = System.currentTimeMillis();
         String key0 = "foo";
@@ -60,8 +58,8 @@ public class MessageFileTest {
         byte[] payload1 = "oink".getBytes("UTF8");
         int length1 = 1/*type*/ + 8/*timestamp*/ + 2/*key size*/ + 4/* payload size*/ + key1.length() + payload1.length;
 
-        assertEquals(1000L, mf.append(ts0, key0, ByteBuffer.wrap(payload0)));
-        assertEquals(1000L + length0, mf.append(ts1, key1, ByteBuffer.wrap(payload1)));
+        assertEquals(1000L, mf.append(ts0, key0, toChannel(payload0), payload0.length));
+        assertEquals(1000L + length0, mf.append(ts1, key1, toChannel(payload1), payload1.length));
 
         int expectedLength = 4096/*file header*/ + length0 + length1;
         assertEquals(expectedLength, mf.length());
@@ -113,12 +111,20 @@ public class MessageFileTest {
         return buf;
     }
 
+    private ReadableByteChannel toChannel(byte[] data) {
+        return Channels.newChannel(new ByteArrayInputStream(data));
+    }
+
+    private long append(MessageFile mf, long timestamp, String routingKey, byte[] data) throws IOException {
+        return mf.append(timestamp, routingKey, toChannel(data), data.length);
+    }
+
     @Test
     public void testCheckpoint() throws IOException {
         File file = new File(dir, "checkpoint.qdb");
         file.delete();
         MessageFile mf = new MessageFile(file, 0, 1000000);
-        mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap("oink".getBytes("UTF8")));
+        append(mf, System.currentTimeMillis(), "", "oink".getBytes("UTF8"));
         mf.checkpoint(false);
         mf.close();
 
@@ -160,12 +166,12 @@ public class MessageFileTest {
         long ts0 = System.currentTimeMillis();
         String key0 = "foo";
         byte[] payload0 = "piggy".getBytes("UTF8");
-        long id0 = mf.append(ts0, key0, ByteBuffer.wrap(payload0));
+        long id0 = append(mf, ts0, key0, payload0);
 
         long ts1 = ts0 + 1;
         String key1 = "foobar";
         byte[] payload1 = "oink".getBytes("UTF8");
-        long id1 = mf.append(ts1, key1, ByteBuffer.wrap(payload1));
+        long id1 = append(mf, ts1, key1, payload1);
 
         MessageCursor i = mf.cursor(1000);
 
@@ -195,13 +201,13 @@ public class MessageFileTest {
 
 
         MessageFile mf = new MessageFile(file, 0, 4096 + 15/*header*/ + 100);
-        long id = mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap(msg, 0, 100));
+        long id = append(mf, System.currentTimeMillis(), "", Arrays.copyOf(msg, 100));
         assertEquals(id, 0);
         mf.close();
 
         file.delete();
         mf = new MessageFile(file, 0, 4096 + 15/*header*/ + 100);
-        id = mf.append(System.currentTimeMillis(), "", ByteBuffer.wrap(msg, 0, 101));
+        id = append(mf, System.currentTimeMillis(), "", Arrays.copyOf(msg, 101));
         assertEquals(id, -1);
         mf.close();
     }
@@ -224,7 +230,7 @@ public class MessageFileTest {
         long ts = System.currentTimeMillis();
         int c;
         for (c = 0; c < 100000; c++) {
-            long id = mf.append(ts + c * 1000, "", ByteBuffer.wrap(msg));
+            long id = append(mf, ts + c * 1000, "", msg);
             if (id < 0) break;
         }
         mf.close();
@@ -256,7 +262,7 @@ public class MessageFileTest {
         byte[] msg = new byte[100];
         long ts = (System.currentTimeMillis() / 1000L) * 1000L;
         for (int i = 0; i < maxBuckets * 2; i++) {
-            mf.append(ts + i * 1000, "", ByteBuffer.wrap(msg));
+            append(mf, ts + i * 1000, "", msg);
         }
 
         for (int i = 0; i < maxBuckets; i++) {
@@ -317,7 +323,7 @@ public class MessageFileTest {
         byte[] msg = new byte[100];
         long ts = (System.currentTimeMillis() / 1000L) * 1000L;
         for (int i = 0; i < maxBuckets * 2; i++) {
-            mf.append(ts + i * 1000, "", ByteBuffer.wrap(msg));
+            append(mf, ts + i * 1000, "", msg);
         }
 
         Timeline t = mf.getTimeline();
@@ -347,7 +353,7 @@ public class MessageFileTest {
         while (true) {
             Msg msg = new Msg(ts += rnd.nextInt(1000) + 1, rnd, 500);
             // avg approx 6 messages per bucket so some skipping will be required
-            msg.id = mf.append(msg.timestamp, msg.routingKey, ByteBuffer.wrap(msg.payload));
+            msg.id = append(mf, msg.timestamp, msg.routingKey, msg.payload);
             if (msg.id < 0) break;
             list.add(msg);
         }
@@ -415,7 +421,7 @@ public class MessageFileTest {
         long ts0 = System.currentTimeMillis();
         String key0 = "foo";
         byte[] payload0 = "piggy".getBytes("UTF8");
-        long id0 = mf.append(ts0, key0, ByteBuffer.wrap(payload0));
+        long id0 = append(mf, ts0, key0, payload0);
         assertTrue(c.next());
         assertEquals(id0, c.getId());
         assertEquals(ts0, c.getTimestamp());
@@ -426,7 +432,7 @@ public class MessageFileTest {
         long ts1 = ts0 + 1;
         String key1 = "foobar";
         byte[] payload1 = "oink".getBytes("UTF8");
-        long id1 = mf.append(ts1, key1, ByteBuffer.wrap(payload1));
+        long id1 = append(mf, ts1, key1, payload1);
         assertTrue(c.next());
         assertEquals(id1, c.getId());
         assertEquals(ts1, c.getTimestamp());
@@ -464,7 +470,7 @@ public class MessageFileTest {
         MessageFile mf = new MessageFile(file, 1000, 1000000);
         assertEquals(0L, mf.getMostRecentTimestamp());
 
-        mf.append(123L, "", ByteBuffer.wrap(new byte[0]));
+        append(mf, 123L, "", new byte[0]);
         assertEquals(123L, mf.getMostRecentTimestamp());
 
         mf.close();
@@ -493,7 +499,7 @@ public class MessageFileTest {
         long start = System.currentTimeMillis();
         for (int i = 0; i < numMessages; i++) {
             int sz = rnd.nextInt(msg.length);
-            mf.append(System.currentTimeMillis(), "msg" + i, ByteBuffer.wrap(msg, 0, sz));
+            append(mf, System.currentTimeMillis(), "msg" + i, Arrays.copyOf(msg, sz));
         }
         mf.checkpoint(false);
         mf.close();
