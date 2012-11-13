@@ -5,15 +5,16 @@ Disk based message queue supporting sequential retrieval of old messages by id a
 in JVM applications. Much more efficient than storing messages in a relational database or in a MongoDB capped
 collection or whatever.
 
+
 Usage
 -----
 
 Creating a new buffer:
 
     MessageBuffer mb = new PersistentMessageBuffer("buffer-dir");
-    mb.setMaxLength(10 * 1000 * 1000000L /*10G*/ );
+    mb.setMaxLength(100 * 1000 * 1000000L /*100G*/ );
 
-The buffer will store its data in files in buffer-dir, each approximately 10M in size (10G / 1000). When the buffer
+The buffer will store its data in files in buffer-dir, each approximately 100M in size (100G / 1000). When the buffer
 is full the oldest file(s) are deleted to make space.
 
 Appending a message:
@@ -21,7 +22,9 @@ Appending a message:
     byte[] message = ...
     long id = mb.append(System.currentTimeMillis(), "some:routing:information", message);
     System.out.println("Appended message id " + id);
-    // message id's always get bigger but are not sequential
+
+Message id's always get bigger but are not sequential. Note that the routing key is saved with the message but is
+not used by qdb-buffer.
 
 Read messages:
 
@@ -62,9 +65,60 @@ Features
 --------
 
 - Efficient reading of messages from any point in time or id
-- Buffer provides a timeline or histogram of messages over time (e.g. for creating a chart)
+- High performance
 - Automatic recovery after system crash. Some messages may be lost but the buffer will not be corrupt
+- Buffer provides a timeline or histogram of messages over time (e.g. for creating a chart)
 - Old messages are efficiently deleted when the buffer is full
+- Low memory usage
+- No dependencies
+
+
+FAQ
+---
+
+### How is qdb-buffer different to message queuing middleware (e.g. RabbitMQ)?
+
+Qdb-buffer is concerned with persisting messages to disk efficiently and replaying them from a point in time.
+It does not keep messages in memory or perform message routing. It is designed to sit inside (between) a JVM application
+generating messages and some other application (e.g. messaging middleware), likely running on a different machine,
+that processes or routes them. If the remote application is down or there a network problem, messages are buffered
+by the generating application and not lost. If the remote application loses a bunch of messages or processes them
+incorrectly they can be resent.
+
+### How does qdb-buffer achieve "high performance"?
+
+Messages are appended to files on disk. A 4k block at the start of each file holds the expected size of the file
+(for crash recovery) and a time based index for quick seeking. There is no need for a separate transaction log and
+most writes are simple appends. Old messages are deleted by simply deleting message files.
+
+### How does qdb-buffer achieve "low memory usage"?
+
+Messages are not buffered in memory and written to disk sometime later. They go to disk right away. The memory
+footprint is independent of the number of messages in the buffer.
+
+### What about clustering?
+
+A standalone qdb-server with optional clustering support is under development. Watch this space.
+
+
+Changelog
+---------
+
+0.9.0:
+- Initial release
+
+
+Building
+--------
+
+This project is built using Gradle (http://www.gradle.org/). Download and install Gradle (just unzip it and
+make sure 'gradle' is on your path). Then do:
+
+    $ gradle check
+    $ gradle assemble
+
+This will run the unit tests and create jars in build/libs.
+
 
 License
 -------
