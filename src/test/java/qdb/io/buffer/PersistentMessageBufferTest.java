@@ -16,13 +16,16 @@
 
 package qdb.io.buffer;
 
+import junit.framework.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -252,6 +255,108 @@ public class PersistentMessageBufferTest {
     private long append(PersistentMessageBuffer b, long timestamp, String key, int len) throws IOException {
         byte[] payload = new byte[len - 15 - key.length()];
         return b.append(timestamp, key, payload);
+    }
+
+    private static class CursorThread extends Thread {
+
+        MessageCursor c;
+        int timeoutMs;
+        CountDownLatch startSignal = new CountDownLatch(1);
+        long startTime;
+        boolean gotMessage;
+        Throwable exception;
+        int waitingMs;
+        CountDownLatch doneSignal = new CountDownLatch(1);
+
+        CursorThread(MessageBuffer b, int timeoutMs) throws IOException {
+            this.c = b.cursor(0);
+            this.timeoutMs = timeoutMs;
+            start();
+        }
+
+        @Override
+        public void run() {
+            try {
+                startSignal.await();
+                startTime = System.currentTimeMillis();
+                gotMessage = c.next(timeoutMs);
+                c.close();
+            } catch (Throwable e) {
+                exception = e;
+            } finally {
+                waitingMs = (int)(System.currentTimeMillis() - startTime);
+                doneSignal.countDown();
+            }
+        }
+    }
+
+    @Test
+    public void testCursorBlocking() throws Exception {
+        File bd = mkdir("cursor-blocking");
+
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
+
+        // thread waits for 100 ms and finishes without getting a message
+        CursorThread t = new CursorThread(b, 100);
+        t.startSignal.countDown();
+        boolean done = t.doneSignal.await(120, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertFalse(t.gotMessage);
+        assertNull(t.exception);
+        assertEquals(100, t.waitingMs, 20.0);
+
+        // thread waits for 50 ms and gets interrupted
+        t = new CursorThread(b, 100);
+        t.startSignal.countDown();
+        Thread.sleep(50);
+        t.interrupt();
+        done = t.doneSignal.await(10, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertFalse(t.gotMessage);
+        assertTrue(t.exception instanceof InterruptedException);
+
+        // thread waits forever and gets interrupted
+        t = new CursorThread(b, 0);
+        t.startSignal.countDown();
+        Thread.sleep(50);
+        t.interrupt();
+        done = t.doneSignal.await(10, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertFalse(t.gotMessage);
+        assertTrue(t.exception instanceof InterruptedException);
+        assertEquals(50, t.waitingMs, 20.0);
+
+        // thread waits for 50 ms and its cursor is closed so it gets interrupted
+        t = new CursorThread(b, 100);
+        t.startSignal.countDown();
+        Thread.sleep(50);
+        t.c.close();
+        done = t.doneSignal.await(10, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertFalse(t.gotMessage);
+        assertTrue(t.exception instanceof IOException);
+
+        // thread gets message after about 50 ms
+        t = new CursorThread(b, 100);
+        t.startSignal.countDown();
+        Thread.sleep(50);
+        b.append(123L, "", new byte[0]);    // this should immediately wake up the cursor thread
+        done = t.doneSignal.await(100, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertTrue(t.gotMessage);
+        assertNull(t.exception);
+        assertEquals(50, t.waitingMs, 20.0);
+
+        // now that there is something in the buffer the thread gets message immediately without having to wait
+        t = new CursorThread(b, 100);
+        t.startSignal.countDown();
+        done = t.doneSignal.await(10, TimeUnit.MILLISECONDS);
+        assertTrue(done);
+        assertTrue(t.gotMessage);
+        assertNull(t.exception);
+        assertTrue(t.waitingMs < 10);
+
+        b.close();
     }
 
     @SuppressWarnings("ConstantConditions")

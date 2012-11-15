@@ -32,6 +32,14 @@ public interface MessageCursor extends Closeable {
     public boolean next() throws IOException;
 
     /**
+     * Advance to the {@link #next()} message blocking for up to timeoutMs milliseconds if none are available.
+     * Waits forever if timeoutMs is 0. Returns false the timeout expires before a message is available.
+     *
+     * @exception InterruptedException if this thread is interrupted while waiting for a message
+     */
+    public boolean next(int timeoutMs) throws IOException, InterruptedException;
+
+    /**
      * Get the ID of the current message.
      */
     public long getId() throws IOException;

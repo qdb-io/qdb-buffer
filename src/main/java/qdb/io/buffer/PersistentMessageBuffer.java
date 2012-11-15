@@ -24,6 +24,8 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>Stores messages on the file system in multiple files in a directory. Thread safe. The files are named
@@ -46,6 +48,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private MessageFile current;    // file we are currently appending to
     private int lastFileLength;     // only used if current is null
+
+    private Cursor[] waitingCursors = new Cursor[1];
 
     private Executor cleanupExecutor;
     private Runnable cleanupJob;
@@ -201,41 +205,60 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return append(timestamp, routingKey, Channels.newChannel(new ByteArrayInputStream(payload)), payload.length);
     }
 
-    @SuppressWarnings("ConstantConditions")
+    @SuppressWarnings({"ConstantConditions", "SynchronizationOnLocalVariableOrMethodParameter"})
     @Override
-    public long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException {
-        int maxLen = getMaxPayloadSize();
-        if (payloadSize > maxLen) {
-            throw new IllegalArgumentException("Payload size of " + payloadSize + " exceeds max payload size of " +
-                    maxLen);
+    public long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize)
+            throws IOException {
+        long id;
+        Cursor[] copyOfWaitingCursors;
+
+        synchronized (this) {
+            int maxLen = getMaxPayloadSize();
+            if (payloadSize > maxLen) {
+                throw new IllegalArgumentException("Payload size of " + payloadSize + " exceeds max payload size of " +
+                        maxLen);
+            }
+
+            if (current == null) {
+                if (lastFile == 0) {    // new buffer
+                    current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], getSegmentLength());
+                    ++lastFile;
+                } else {
+                    ensureCurrent();
+                }
+            }
+            id = current.append(timestamp, routingKey, payload, payloadSize);
+            if (id < 0) {
+                ensureSpaceInFiles();
+                long firstMessageId = current.getNextMessageId();
+                current.close();
+                current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, getSegmentLength());
+                timestamps[lastFile] = timestamp;
+                files[lastFile++] = firstMessageId;
+                id = current.append(timestamp, routingKey, payload, payloadSize);
+                if (id < 0) {   // this shouldn't happen
+                    throw new IllegalArgumentException("Message is too long?");
+                }
+                if (cleanupExecutor != null) {
+                    cleanupExecutor.execute(cleanupJob);
+                } else {
+                    cleanup();
+                }
+            }
+
+            copyOfWaitingCursors = waitingCursors;
         }
 
-        if (current == null) {
-            if (lastFile == 0) {    // new buffer
-                current = new MessageFile(toFile(files[0], timestamps[0] = timestamp), files[0], getSegmentLength());
-                ++lastFile;
-            } else {
-                ensureCurrent();
+        // Don't notify waiting cursors while we hold our own lock or we can get deadlock.
+        // It doesnt matter if entries in the array are changed while we are notifying so just copying the ref is ok.
+        for (Cursor c : copyOfWaitingCursors) {
+            if (c != null) {
+                synchronized (c) {
+                    c.notifyAll();
+                }
             }
         }
-        long id = current.append(timestamp, routingKey, payload, payloadSize);
-        if (id < 0) {
-            ensureSpaceInFiles();
-            long firstMessageId = current.getNextMessageId();
-            current.close();
-            current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, getSegmentLength());
-            timestamps[lastFile] = timestamp;
-            files[lastFile++] = firstMessageId;
-            id = current.append(timestamp, routingKey, payload, payloadSize);
-            if (id < 0) {   // this shouldn't happen
-                throw new IllegalArgumentException("Message is too long?");
-            }
-            if (cleanupExecutor != null) {
-                cleanupExecutor.execute(cleanupJob);
-            } else {
-                cleanup();
-            }
-        }
+
         return id;
     }
 
@@ -447,16 +470,41 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return new Cursor(i, mf, mf.cursorByTimestamp(timestamp));
     }
 
-    private MessageFile getMessageFileForCursor(int i) throws IOException {
-        synchronized (this) {
-            if (i == lastFile - 1) {
-                current.use();
-                return current;
-            } else if (i >= lastFile) {
-                return null;
-            }
+    private synchronized MessageFile getMessageFileForCursor(int i) throws IOException {
+        if (i == lastFile - 1) {
+            current.use();
+            return current;
+        } else if (i >= lastFile) {
+            return null;
         }
         return new MessageFile(getFile(i), files[i]);
+    }
+
+    private synchronized void addWaitingCursor(Cursor c) {
+        for (int i = waitingCursors.length - 1; i >= 0; i--) {
+            if (waitingCursors[i] == null) {
+                waitingCursors[i] = c;
+                return;
+            }
+        }
+        int n = waitingCursors.length;
+        Cursor[] a = new Cursor[n * 2];
+        System.arraycopy(waitingCursors, 0, a, 0, n);
+        a[n] = c;
+        waitingCursors = a;
+    }
+
+    private synchronized void removeWaitingCursor(Cursor c) {
+        for (int i = waitingCursors.length - 1; i >= 0; i--) {
+            if (waitingCursors[i] == c) {
+                waitingCursors[i] = null;
+                return;
+            }
+        }
+    }
+
+    private synchronized MessageFile getCurrent() {
+        return current;
     }
 
     private class Cursor implements MessageCursor {
@@ -471,15 +519,36 @@ public class PersistentMessageBuffer implements MessageBuffer {
             this.c = c;
         }
 
-        public boolean next() throws IOException {
+        @Override
+        public synchronized boolean next() throws IOException {
+            if (c == null) throw new IOException("Cursor has been closed");
             if (c.next()) return true;
-            synchronized (this) {
-                if (mf == current) return false;
-            }
+            if (mf == getCurrent()) return false;
             close();
             mf = getMessageFileForCursor(++fileIndex);
             c = mf.cursor(mf.getFirstMessageId());
             return c.next();
+        }
+
+        public synchronized boolean next(int timeoutMs) throws IOException, InterruptedException {
+            boolean haveNext = false;
+            addWaitingCursor(this);
+            try {
+                if (timeoutMs <= 0) {
+                    while (!(haveNext = next())) {
+                        wait(timeoutMs);
+                    }
+                } else {
+                    while (!(haveNext = next()) && timeoutMs > 0) {
+                        long start = System.currentTimeMillis();
+                        wait(timeoutMs);
+                        timeoutMs -= (int)(System.currentTimeMillis() - start);
+                    }
+                }
+            } finally {
+                removeWaitingCursor(this);
+            }
+            return haveNext;
         }
 
         public long getId() throws IOException {
@@ -502,7 +571,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             return c.getPayload();
         }
 
-        public void close() throws IOException {
+        public synchronized void close() throws IOException {
             if (c != null) {
                 c.close();
                 c = null;
@@ -511,6 +580,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 mf.close();
                 mf = null;
             }
+            notifyAll();    // causes threads blocked on next(int) to get a "cursor has been closed" IOException
         }
 
         @Override
@@ -526,6 +596,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
      */
     private class EmptyCursor extends Cursor {
 
+        private boolean closed;
+
         private EmptyCursor() {
             super(-1, null, null);
         }
@@ -533,6 +605,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         @Override
         public boolean next() throws IOException {
             if (fileIndex < 0) {
+                if (closed) throw new IOException("Cursor has been closed");
                 mf = getMessageFileForCursor(0);
                 if (mf == null) return false;
                 fileIndex = 0;
@@ -540,6 +613,16 @@ public class PersistentMessageBuffer implements MessageBuffer {
             }
             return super.next();
         }
-    }
 
+        @Override
+        public boolean next(int timeoutMs) throws IOException, InterruptedException {
+            return super.next(timeoutMs);
+        }
+
+        @Override
+        public synchronized void close() throws IOException {
+            super.close();
+            closed = true;
+        }
+    }
 }

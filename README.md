@@ -36,7 +36,8 @@ Read messages:
         ...
     }
 
-You can call next() after it returns false to poll for new messages.
+You can call next() after it returns false to poll for new messages. You can also call next(timeoutMs) to block
+until a message is available ot the timeout expires.
 
 Read messages by timestamp:
 

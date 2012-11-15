@@ -619,6 +619,11 @@ class MessageFile implements Closeable {
             return true;
         }
 
+        @Override
+        public boolean next(int timeoutMs) throws IOException {
+            throw new UnsupportedEncodingException();
+        }
+
         public long getId() {
             return id;
         }
