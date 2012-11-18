@@ -144,6 +144,20 @@ public class MessageFileTest {
     }
 
     @Test
+    public void testUnclosedFileNotCorrupt() throws IOException {
+        File file = new File(dir, "unclosed.qdb");
+        file.delete();
+        MessageFile mf = new MessageFile(file, 0, 1000000);
+        append(mf, System.currentTimeMillis(), "", "oink".getBytes("UTF8"));
+
+        // this will fail with an IOException if the file is corrupt
+        MessageFile mf2 = new MessageFile(file, 0, 1000000);
+
+        mf2.close();
+        mf.close();
+    }
+
+    @Test
     public void testRead() throws IOException {
         File file = new File(dir, "read.qdb");
         file.delete();
@@ -448,17 +462,17 @@ public class MessageFileTest {
 
         MessageFile mf = new MessageFile(file, 1000, 100000);
         assertTrue(mf.isOpen());
-        mf.close();
+        mf.closeIfUnused();
         assertFalse(mf.isOpen());
 
         mf = new MessageFile(file, 1000, 100000);
         mf.use();
         mf.use();
-        mf.close();
+        mf.closeIfUnused();
         assertTrue(mf.isOpen());
-        mf.close();
+        mf.closeIfUnused();
         assertTrue(mf.isOpen());
-        mf.close();
+        mf.closeIfUnused();
         assertFalse(mf.isOpen());
     }
 

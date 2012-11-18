@@ -16,7 +16,6 @@
 
 package qdb.io.buffer;
 
-import junit.framework.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -420,8 +419,7 @@ public class PersistentMessageBufferTest {
                 "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
 
         CountingExecutor exec = new CountingExecutor();
-        b.setCleanupExecutor(exec);
-        assertTrue(b.getCleanupExecutor() == exec);
+        b.setExecutor(exec);
         append(b, 0, "", 8192);
         assertEquals(1, exec.count);
 
@@ -445,7 +443,7 @@ public class PersistentMessageBufferTest {
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         append(b, 0, "", 8192);
-        assertEquals(0, getStoredLength(first));
+        assertEquals(4096, getStoredLength(first));     // just the file header
         b.sync();
         assertEquals(4096 + 8192, getStoredLength(first));
         b.close();

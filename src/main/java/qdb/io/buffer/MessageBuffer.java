@@ -20,6 +20,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Timer;
+import java.util.concurrent.Executor;
 
 /**
  * Queue that supports sequential retrieval of old messages by id and timestamp.
@@ -90,6 +92,24 @@ public interface MessageBuffer extends Closeable {
     void sync() throws IOException;
 
     /**
+     * A {@link #sync()} is done every this many seconds if at least one message has been appended since the last
+     * sync. Default is 60 seconds. Set to 0 to disable auto-sync.
+     */
+    void setAutoSyncInterval(int seconds);
+
+    /**
+     * How often are auto syncs done?
+     * @see #setAutoSyncInterval(int)
+     */
+    int getAutoSyncInterval();
+
+    /**
+     * Set the timer used for auto-sync (see {@link #setAutoSyncInterval(int)}). If none is set then one will be
+     * created when it is first needed i.e. if auto-sync is enabled and a sync is scheduled.
+     */
+    void setTimer(Timer timer);
+
+    /**
      * Get a snapshot of the high level timeline for this buffer. Note that if the buffer is empty null is returned.
      */
     Timeline getTimeline() throws IOException;
@@ -100,4 +120,9 @@ public interface MessageBuffer extends Closeable {
      */
     Timeline getTimeline(long messageId) throws IOException;
 
+    /**
+     * Provide an executor (e.g. thread pool) to do cleanup's asynchronously when the buffer starts a new message
+     * file. If no executor is set then cleanups are done synchronously i.e. on the thread appending the message.
+     */
+    void setExecutor(Executor executor);
 }

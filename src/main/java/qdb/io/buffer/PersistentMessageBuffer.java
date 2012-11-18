@@ -23,9 +23,9 @@ import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * <p>Stores messages on the file system in multiple files in a directory. Thread safe. The files are named
@@ -51,8 +51,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private Cursor[] waitingCursors = new Cursor[1];
 
-    private Executor cleanupExecutor;
+    private Executor executor;
     private Runnable cleanupJob;
+
+    private int autoSyncInterval = 60;
+    private Timer timer;
+    private SyncTimerTask syncTask;
 
     private static final FilenameFilter QDB_FILTER = new FilenameFilter() {
         @Override
@@ -167,12 +171,9 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return ans;
     }
 
-    /**
-     * Provide an executor (e.g. thread pool) to do cleanup's asynchronously when the buffer starts a new message
-     * file. If no executor is set then cleanups are done synchronously i.e. on the thread appending the message.
-     */
-    public void setCleanupExecutor(Executor cleanupExecutor) {
-        this.cleanupExecutor = cleanupExecutor;
+    @Override
+    public void setExecutor(Executor executor) {
+        this.executor = executor;
         if (cleanupJob == null) {
             cleanupJob = new Runnable() {
                 @Override
@@ -185,10 +186,6 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 }
             };
         }
-    }
-
-    public Executor getCleanupExecutor() {
-        return cleanupExecutor;
     }
 
     @Override
@@ -237,7 +234,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             if (id < 0) {
                 ensureSpaceInFiles();
                 long firstMessageId = current.getNextMessageId();
-                current.close();
+                current.closeIfUnused();
                 current = new MessageFile(toFile(firstMessageId, timestamp), firstMessageId, getSegmentLength());
                 timestamps[lastFile] = timestamp;
                 files[lastFile++] = firstMessageId;
@@ -245,8 +242,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 if (id < 0) {   // this shouldn't happen
                     throw new IllegalArgumentException("Message is too long?");
                 }
-                if (cleanupExecutor != null) {
-                    cleanupExecutor.execute(cleanupJob);
+                if (executor != null) {
+                    executor.execute(cleanupJob);
                 } else {
                     cleanup();
                 }
@@ -261,6 +258,16 @@ public class PersistentMessageBuffer implements MessageBuffer {
             if (c != null) {
                 synchronized (c) {
                     c.notifyAll();
+                }
+            }
+        }
+
+        if (autoSyncInterval > 0) {
+            synchronized (this) {
+                if (timer == null) timer = new Timer("qdb-timer:" + dir, true);
+                if (syncTask == null || syncTask.isDone()) {
+                    syncTask = new SyncTimerTask();
+                    timer.schedule(syncTask, autoSyncInterval * 1000L);
                 }
             }
         }
@@ -294,6 +301,21 @@ public class PersistentMessageBuffer implements MessageBuffer {
         firstFile = 0;
     }
 
+    @Override
+    public void setAutoSyncInterval(int seconds) {
+        this.autoSyncInterval = seconds;
+    }
+
+    @Override
+    public int getAutoSyncInterval() {
+        return autoSyncInterval;
+    }
+
+    @Override
+    public void setTimer(Timer timer) {
+        this.timer = timer;
+    }
+
     /**
      * If this buffer is exceeding its maximum capacity then delete some of the the oldest files until it is under
      * the limit.
@@ -315,6 +337,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized void sync() throws IOException {
+        System.out.println("sync");
         if (current != null) {
             current.checkpoint(true);
         }
@@ -340,6 +363,10 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized void close() throws IOException {
+        if (syncTask != null) {
+            syncTask.cancel();
+            syncTask = null;
+        }
         if (current != null) current.close();
     }
 
@@ -408,7 +435,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         try {
             return mf.getTimeline();
         } finally {
-            mf.close();
+            mf.closeIfUnused();
         }
     }
 
@@ -583,7 +610,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 c = null;
             }
             if (mf != null) {
-                mf.close();
+                mf.closeIfUnused();
                 mf = null;
             }
             notifyAll();    // causes threads blocked on next(int) to get a "cursor has been closed" IOException
@@ -629,6 +656,26 @@ public class PersistentMessageBuffer implements MessageBuffer {
         public synchronized void close() throws IOException {
             super.close();
             closed = true;
+        }
+    }
+
+    private class SyncTimerTask extends TimerTask {
+
+        private boolean done;
+
+        public boolean isDone() {
+            return done;
+        }
+
+        @Override
+        public void run() {
+            try {
+                PersistentMessageBuffer.this.sync();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } finally {
+                done = true;
+            }
         }
     }
 }

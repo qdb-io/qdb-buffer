@@ -133,13 +133,18 @@ class MessageFile implements Closeable {
             fileHeader.putInt(this.maxFileSize = maxFileSize);
             fileHeader.putInt(length = FILE_HEADER_SIZE);
             fileHeader.putInt(0);
+            fileHeader.position(0);
             channel.write(fileHeader);
+            channel.force(false);       // make sure file always has a valid header
             bucketIndex = -1;
         } else {
             int sz = channel.read(fileHeader);
             if (sz < FILE_HEADER_SIZE) throw new IOException("File header too short [" + file + "]");
             fileHeader.flip();
-            if (fileHeader.getShort() != FILE_MAGIC) throw new IOException("Invalid file magic [" + file + "]");
+            short magic = fileHeader.getShort();
+            if (magic != FILE_MAGIC) {
+                throw new IOException("Invalid file magic 0x" + Integer.toHexString(magic & 0xFFFF) + " [" + file + "]");
+            }
             fileHeader.position(fileHeader.position() + 2);
             this.maxFileSize = fileHeader.getInt();
             if (this.maxFileSize < FILE_HEADER_SIZE) {
@@ -268,8 +273,8 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * Increment the usage counter for this file. Each call to {@link #close()} decrements the counter and the file
-     * is actually closed when the counter reaches zero.
+     * Increment the usage counter for this file. Each call to {@link #closeIfUnused()} decrements the counter and
+     * the file is actually closed when the counter reaches zero.
      */
     public void use() {
         synchronized (channel) {
@@ -280,13 +285,24 @@ class MessageFile implements Closeable {
     /**
      * Close this file if no-one else is using it (see {@link #use()}).
      */
-    @Override
-    public void close() throws IOException {
+    public void closeIfUnused() throws IOException {
         synchronized (channel) {
-            if (--usageCounter == 0) {
+            if (--usageCounter <= 0) {
                 checkpoint(true);
                 raf.close();
             }
+        }
+    }
+
+    /**
+     * Close this file even if it is in use.
+     */
+    @Override
+    public void close() throws IOException {
+        synchronized (channel) {
+            --usageCounter;
+            checkpoint(true);
+            raf.close();
         }
     }
 
