@@ -214,7 +214,7 @@ class MessageFile implements Closeable {
             // see if we need to start a new histogram bucket
             if (bucketIndex < 0 || ((id - bucketMessageId >= bytesPerBucket) && bucketIndex < MAX_BUCKETS - 1)) {
                 if (bucketIndex >= 0) {
-                    putBucketDataInFileHeader();
+                    checkpoint(false);  // this puts the bucket data in the header
                     ++bucketIndex;
                 } else {
                     bucketIndex = 0;
