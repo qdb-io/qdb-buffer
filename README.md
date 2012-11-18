@@ -1,5 +1,5 @@
-qdb-buffer
-==========
+qdb.io.buffer
+=============
 
 Disk based message queue supporting sequential retrieval of old messages by id and timestamp. Designed to be embedded
 in JVM applications. Much more efficient than storing messages in a relational database or in a MongoDB capped
