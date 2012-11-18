@@ -54,7 +54,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private Executor executor;
     private Runnable cleanupJob;
 
-    private int autoSyncInterval = 60;
+    private int autoSyncIntervalMs = 1;
     private Timer timer;
     private SyncTimerTask syncTask;
 
@@ -262,12 +262,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
             }
         }
 
-        if (autoSyncInterval > 0) {
+        if (autoSyncIntervalMs > 0) {
             synchronized (this) {
                 if (timer == null) timer = new Timer("qdb-timer:" + dir, true);
                 if (syncTask == null || syncTask.isDone()) {
                     syncTask = new SyncTimerTask();
-                    timer.schedule(syncTask, autoSyncInterval * 1000L);
+                    timer.schedule(syncTask, autoSyncIntervalMs);
                 }
             }
         }
@@ -302,13 +302,13 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public void setAutoSyncInterval(int seconds) {
-        this.autoSyncInterval = seconds;
+    public void setAutoSyncInterval(int ms) {
+        this.autoSyncIntervalMs = ms;
     }
 
     @Override
     public int getAutoSyncInterval() {
-        return autoSyncInterval;
+        return autoSyncIntervalMs;
     }
 
     @Override

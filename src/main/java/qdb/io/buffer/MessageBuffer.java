@@ -92,13 +92,13 @@ public interface MessageBuffer extends Closeable {
     void sync() throws IOException;
 
     /**
-     * A {@link #sync()} is done every this many seconds if at least one message has been appended since the last
-     * sync. Default is 60 seconds. Set to 0 to disable auto-sync.
+     * A {@link #sync()} is done every this many ms if at least one message has been appended since the last
+     * sync. Default is 1000 ms. Set to 0 to disable auto-sync.
      */
-    void setAutoSyncInterval(int seconds);
+    void setAutoSyncInterval(int ms);
 
     /**
-     * How often are auto syncs done?
+     * How often are auto syncs done in ms?
      * @see #setAutoSyncInterval(int)
      */
     int getAutoSyncInterval();
