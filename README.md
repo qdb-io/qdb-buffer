@@ -36,8 +36,14 @@ Read messages:
         ...
     }
 
-You can call next() after it returns false to poll for new messages. You can also call next(timeoutMs) to block
-until a message is available ot the timeout expires.
+You can call next() after it returns false to poll for new messages.
+
+Read messages with blocking:
+
+    MessageCursor c = mb.cursor(mb.getNextMessageId()); // read new messages
+    while (c.next(10000)) {     // wait up to 10 secs for a message, use 0 to block forever
+        ...
+    }
 
 Read messages by timestamp:
 
