@@ -65,14 +65,20 @@ public class PersistentMessageBuffer implements MessageBuffer {
         this(dir, 0L);
     }
 
+    /**
+     * Dir will be created if it does not exist. It must be writeable.
+     */
     public PersistentMessageBuffer(File dir, long firstMessageId) throws IOException {
         if (!dir.exists()) {
-            if (!dir.mkdir()) {
+            if (!dir.mkdirs()) {
                 throw new IOException("Directory [" + dir + "] does not exist and could not be created");
             }
         }
         if (!dir.isDirectory()) {
             throw new IOException("Not a directory [" + dir + "]");
+        }
+        if (!dir.canWrite()) {
+            throw new IOException("Not writeable [" + dir + "]");
         }
         this.dir = dir;
 
