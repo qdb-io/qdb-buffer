@@ -336,16 +336,23 @@ public class PersistentMessageBufferTest {
         assertFalse(t.gotMessage);
         assertTrue(t.exception instanceof IOException);
 
-        // thread gets message after about 50 ms
+        // 2 threads gets message after about 50 ms
         t = new CursorThread(b, 100);
+        CursorThread t2 = new CursorThread(b, 100);
         t.startSignal.countDown();
+        t2.startSignal.countDown();
         Thread.sleep(50);
-        b.append(123L, "", new byte[0]);    // this should immediately wake up the cursor thread
+        b.append(123L, "", new byte[0]);    // this should immediately wake up both cursor thread2
         done = t.doneSignal.await(100, TimeUnit.MILLISECONDS);
         assertTrue(done);
+        done = t2.doneSignal.await(100, TimeUnit.MILLISECONDS);
+        assertTrue(done);
         assertTrue(t.gotMessage);
+        assertTrue(t2.gotMessage);
         assertNull(t.exception);
+        assertNull(t2.exception);
         assertEquals(50, t.waitingMs, 20.0);
+        assertEquals(50, t2.waitingMs, 20.0);
 
         // now that there is something in the buffer the thread gets message immediately without having to wait
         t = new CursorThread(b, 100);
