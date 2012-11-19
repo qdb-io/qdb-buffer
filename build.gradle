@@ -2,8 +2,8 @@ apply plugin: 'java'
 apply plugin: 'maven'
 apply from: 'https://github.com/breskeby/gradleplugins/raw/master/emmaPlugin/emma.gradle'
 
-group = 'qdb.io'
-version = '0.9.0'
+group = 'io.qdb'
+version = '0.1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()

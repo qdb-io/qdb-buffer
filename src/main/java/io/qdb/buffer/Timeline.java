@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package qdb.io.buffer;
+package io.qdb.buffer;
 
 /**
  * A point on the message timeline for a buffer.

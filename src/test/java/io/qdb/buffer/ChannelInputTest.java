@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package qdb.io.buffer;
+package io.qdb.buffer;
 
 import org.junit.BeforeClass;
 import org.junit.Test;

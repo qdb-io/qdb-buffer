@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package qdb.io.buffer;
+package io.qdb.buffer;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -350,8 +350,8 @@ public class PersistentMessageBufferTest {
         assertTrue(t2.gotMessage);
         assertNull(t.exception);
         assertNull(t2.exception);
-        assertEquals(50, t.waitingMs, 20.0);
-        assertEquals(50, t2.waitingMs, 20.0);
+        assertEquals(50, t.waitingMs, 50.0);
+        assertEquals(50, t2.waitingMs, 50.0);
 
         // now that there is something in the buffer the thread gets message immediately without having to wait
         t = new CursorThread(b, 100);

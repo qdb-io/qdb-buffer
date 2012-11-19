@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package qdb.io.buffer;
+package io.qdb.buffer;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Timer;
 import java.util.concurrent.Executor;

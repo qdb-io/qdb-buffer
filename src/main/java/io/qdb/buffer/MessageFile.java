@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package qdb.io.buffer;
+package io.qdb.buffer;
 
 import java.io.*;
 import java.nio.ByteBuffer;
