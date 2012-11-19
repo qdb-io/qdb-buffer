@@ -111,7 +111,7 @@ A standalone qdb-server with optional clustering support is under development. W
 Changelog
 ---------
 
-0.9.0:
+0.1.0:
 - Initial release
 
 
