@@ -1,4 +1,4 @@
-qdb.io.buffer
+io.qdb.buffer
 =============
 
 Disk based message queue supporting sequential retrieval of old messages by id and timestamp. Designed to be embedded
@@ -54,7 +54,7 @@ Read messages by timestamp:
     }
 
 Get a timeline of messages in the buffer. This can be used to create a user interface to read old messages from a
-given time onwards and so on. There will be one entry on the timeline for each segment (file) in the buffer.
+given time onwards and so on. There will be one entry on the timeline for each file in the buffer.
 
     Timeline t = mb.getTimeline();
     for (int i = 0, n = t.size(); i < n; i++) {
@@ -62,7 +62,7 @@ given time onwards and so on. There will be one entry on the timeline for each s
             " millis " + t.getMillis(i) + " count " + t.getCount(i));
     }
 
-Get a more detailed timeline for the segment (file) containing the message. This is used to "drill down" and provide
+Get a more detailed timeline for the file containing the message. This is used to "drill down" and provide
 more detail for part of the bigger timeline.
 
     Timeline t = mb.getTimeline(messageId);
