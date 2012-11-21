@@ -1,9 +1,10 @@
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'signing'
 apply from: 'https://github.com/breskeby/gradleplugins/raw/master/emmaPlugin/emma.gradle'
 
 group = 'io.qdb'
-version = '0.1.0-SNAPSHOT'
+version = '0.1.0'
 
 repositories {
     mavenCentral()
@@ -22,3 +23,26 @@ artifacts {
     archives sourceJar
 }
 
+signing {
+    sign configurations.archives
+}
+
+def sonatypeUsername = properties.sonatypeUsername
+def sonatypePassword = properties.sonatypePassword
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { deployment -> signing.signPom(deployment) }
+            if (version.endsWith("SNAPSHOT")) {
+                repository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
+                    authentication(userName: sonatypeUsername, password: sonatypePassword)
+                }
+            } else {
+                repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2") {
+                    authentication(userName: sonatypeUsername, password: sonatypePassword)
+                }
+            }
+        }
+    }
+}
