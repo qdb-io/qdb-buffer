@@ -266,8 +266,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             synchronized (this) {
                 if (timer == null) timer = new Timer("qdb-timer:" + dir, true);
                 if (syncTask == null || syncTask.isDone()) {
-                    syncTask = new SyncTimerTask();
-                    timer.schedule(syncTask, autoSyncIntervalMs);
+                    timer.schedule(syncTask = new SyncTimerTask(), autoSyncIntervalMs);
                 }
             }
         }
