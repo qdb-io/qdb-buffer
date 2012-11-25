@@ -43,10 +43,10 @@ public interface MessageBuffer extends Closeable {
     long getNextMessageId() throws IOException;
 
     /**
-     * Create a cursor reading data from messageId onwards. To read the oldest message use 0 as the message ID. To
-     * read the newest use {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor
-     * reads from the oldest message onwards. The cursor should only be used from one thread at a time i.e. it is not
-     * thread safe.
+     * Create a cursor reading the next message with id greater than or equal to messageId onwards (i.e. messageId
+     * can be 'between' messages). To read the oldest message use 0 as the message ID. To read the newest use
+     * {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor reads from the
+     * oldest message onwards. The cursor should only be used from one thread at a time i.e. it is not thread safe.
      */
     MessageCursor cursor(long messageId) throws IOException;
 

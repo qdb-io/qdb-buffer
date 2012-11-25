@@ -54,7 +54,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private Executor executor;
     private Runnable cleanupJob;
 
-    private int autoSyncIntervalMs = 1;
+    private int autoSyncIntervalMs = 1000;
     private Timer timer;
     private SyncTimerTask syncTask;
 
@@ -337,7 +337,6 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized void sync() throws IOException {
-        System.out.println("sync");
         if (current != null) {
             current.checkpoint(true);
         }
@@ -441,7 +440,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public String toString() {
-        return "PersistentMessageBuffer[" + dir + "]";
+        return "PersistentMessageBuffer[" + dir.getAbsolutePath() + "]";
     }
 
     @Override
