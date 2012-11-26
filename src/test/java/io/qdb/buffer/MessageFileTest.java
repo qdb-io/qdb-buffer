@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 @SuppressWarnings("ResultOfMethodCallIgnored")
 public class MessageFileTest {
@@ -78,9 +79,10 @@ public class MessageFileTest {
         assertEquals(ts0, ins.readLong());              // bucket timestamp
         assertEquals(2, ins.readInt());                 // bucket count
 
-        for (int i = 16 + 16; i < 4096; i++) {
-            byte b = ins.readByte();
-            assertEquals("Byte at " + i + " is not zero (0x" + Integer.toHexString(b) + ")", (byte)0, b);
+        for (int i = 16 + 16; i < 4096; i += 16) {
+            assertEquals(-1, ins.readInt());
+            assertEquals(0L, ins.readLong());
+            assertEquals(0, ins.readInt());
         }
 
         assertEquals((byte)0xA1, ins.readByte());   // type
@@ -341,8 +343,25 @@ public class MessageFileTest {
         }
 
         Timeline t = mf.getTimeline();
+        assertEquals(255, t.size());
         for (int i = 0; i < t.size(); i++) {
             String m = "timeline[" + i + "]";
+            System.out.println(m + " " + t.getMillis(i) + " millis");
+            assertEquals(m, 1000 + i * (100 + 15) * 2, t.getMessageId(i));
+            assertEquals(m, ts + i * 2000, t.getTimestamp(i));
+            assertEquals(m, i == maxBuckets - 1 ? 1000 : 2000, t.getMillis(i));
+            assertEquals(m, 2, t.getCount(i));
+            assertEquals(m, (100 + 15) * 2, t.getBytes(i));
+        }
+        mf.close();
+
+        // repeat check on a newly opened file
+        mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
+        t = mf.getTimeline();
+        assertEquals(255, t.size());
+        for (int i = 0; i < t.size(); i++) {
+            String m = "timeline[" + i + "]";
+            System.out.println(m + " " + t.getMillis(i) + " millis");
             assertEquals(m, 1000 + i * (100 + 15) * 2, t.getMessageId(i));
             assertEquals(m, ts + i * 2000, t.getTimestamp(i));
             assertEquals(m, i == maxBuckets - 1 ? 1000 : 2000, t.getMillis(i));
@@ -491,6 +510,32 @@ public class MessageFileTest {
 
         mf = new MessageFile(file, 1000);
         assertEquals(123L, mf.getMostRecentTimestamp());
+        mf.close();
+    }
+
+    @Test
+    public void testMessageCount() throws IOException {
+        File file = new File(dir, "message-count");
+        file.delete();
+
+        int maxBuckets = 255;
+
+        // file is big enough for 2 * 255 messages each 100 bytes so there will be 2 per bucket
+        MessageFile mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
+        assertEquals(0, mf.getMessageCount());
+
+        byte[] msg = new byte[100];
+        append(mf, 10L, "", msg);
+        assertEquals(1, mf.getMessageCount());
+        append(mf, 20L, "", msg);
+        assertEquals(2, mf.getMessageCount());
+        append(mf, 30L, "", msg);
+        assertEquals(3, mf.getMessageCount());  // new bucket
+        mf.close();
+
+        // check count works on existing file
+        mf = new MessageFile(file, 1000, 4096 + 2 * maxBuckets * (100 + 15));
+        assertEquals(3, mf.getMessageCount());
         mf.close();
     }
 

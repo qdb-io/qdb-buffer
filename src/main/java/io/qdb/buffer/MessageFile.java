@@ -132,7 +132,7 @@ class MessageFile implements Closeable {
             fileHeader.putShort((short)0);
             fileHeader.putInt(this.maxFileSize = maxFileSize);
             fileHeader.putInt(length = FILE_HEADER_SIZE);
-            fileHeader.putInt(0);
+            for (int i = bucketPosition(0); i < FILE_HEADER_SIZE; i += 16) fileHeader.putInt(i, -1);
             fileHeader.position(0);
             channel.write(fileHeader);
             channel.force(false);       // make sure file always has a valid header
@@ -158,7 +158,7 @@ class MessageFile implements Closeable {
             }
             lastCheckpointLength = length;
 
-            for (bucketIndex = 0; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex++)) != 0; );
+            for (bucketIndex = 0; bucketIndex < MAX_BUCKETS && fileHeader.getInt(bucketPosition(bucketIndex)) != -1; bucketIndex++);
 
             fileHeader.position(bucketPosition(--bucketIndex));
             bucketMessageId = fileHeader.getInt();
@@ -334,6 +334,21 @@ class MessageFile implements Closeable {
                 }
             }
             return mostRecentTimestamp;
+        }
+    }
+
+    /**
+     * How many messages are in this file?
+     */
+    public int getMessageCount() throws IOException {
+        synchronized (channel) {
+            int count = 0;
+            int start = bucketPosition(0);
+            for (int i = 0; i < bucketIndex; i++) {
+                count += fileHeader.getInt(start + i * 16 + 12);
+            }
+            count += bucketCount;
+            return count;
         }
     }
 
@@ -637,7 +652,7 @@ class MessageFile implements Closeable {
 
         @Override
         public boolean next(int timeoutMs) throws IOException {
-            throw new UnsupportedEncodingException();
+            throw new UnsupportedOperationException();
         }
 
         public long getId() {

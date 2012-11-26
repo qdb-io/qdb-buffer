@@ -1,10 +1,10 @@
 apply plugin: 'java'
 apply plugin: 'maven'
 apply plugin: 'signing'
-apply from: 'https://github.com/breskeby/gradleplugins/raw/master/emmaPlugin/emma.gradle'
+apply from: file("etc/emma.gradle")
 
 group = 'io.qdb'
-version = '0.1.0'
+version = '0.1.1-SNAPSHOT'
 
 repositories {
     mavenCentral()
