@@ -173,6 +173,10 @@ class MessageFile implements Closeable {
         return FILE_HEADER_FIXED_SIZE + i * BUCKET_RECORD_SIZE;
     }
 
+    public File getFile() {
+        return file;
+    }
+
     public long getFirstMessageId() {
         return firstMessageId;
     }
@@ -403,7 +407,7 @@ class MessageFile implements Closeable {
             return this.timestamps[i + 1] - this.timestamps[i];
         }
 
-        public long getCount(int i) {
+        public int getCount(int i) {
             return counts[i];
         }
     }

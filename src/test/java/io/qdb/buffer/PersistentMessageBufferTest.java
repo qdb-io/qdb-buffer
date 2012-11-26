@@ -78,7 +78,7 @@ public class PersistentMessageBufferTest {
         assertEquals(0x1234L, append(b, ts, "", 256));
         b.close();
 
-        expect(bd.list(), "0000000000001234-0000000000005678.qdb");
+        expect(bd.list(), "0000000000001234-0000000000005678-0.qdb");
 
         b = new PersistentMessageBuffer(bd);
         assertEquals(0x1334L, append(b, ts, "", 256));
@@ -96,7 +96,7 @@ public class PersistentMessageBufferTest {
         append(b, ts, "", 4096);
         b.close();
 
-        expect(bd.list(), "0000000000000000-0000000000005678.qdb");
+        expect(bd.list(), "0000000000000000-0000000000005678-0.qdb");
 
         b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
@@ -104,7 +104,7 @@ public class PersistentMessageBufferTest {
         append(b, ts, "", 4096);
         b.close();
 
-        expect(bd.list(), "0000000000000000-0000000000005678.qdb", "0000000000002000-0000000000009abc.qdb");
+        expect(bd.list(), "0000000000000000-0000000000005678-2.qdb", "0000000000002000-0000000000009abc-0.qdb");
     }
 
     @Test
@@ -135,7 +135,8 @@ public class PersistentMessageBufferTest {
         String[] expect = new String[n];
         for (int i = 0; i < n; i++) {
             append(b, ++ts, "", 8192);
-            expect[i] = "00000000" + String.format("%08x", i * 8192) + "-00000000" + String.format("%08x", ts) + ".qdb";
+            expect[i] = "00000000" + String.format("%08x", i * 8192) + "-00000000" + String.format("%08x", ts) +
+                    "-" + (i < n - 1 ? "1" : "0") + ".qdb";
         }
         b.close();
 
@@ -387,16 +388,16 @@ public class PersistentMessageBufferTest {
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         expect(bd.list(),
-                "0000000000000000-0000000000000000.qdb", "0000000000002000-0000000000000000.qdb",
-                "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+                "0000000000000000-0000000000000000-1.qdb", "0000000000002000-0000000000000000-1.qdb",
+                "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
         b.setMaxLength((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
         b.cleanup();
-        expect(bd.list(), "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+        expect(bd.list(), "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
         b.setMaxLength(1);  // can't get rid of last file
         b.cleanup();
-        expect(bd.list(), "0000000000006000-0000000000000000.qdb");
+        expect(bd.list(), "0000000000006000-0000000000000000-0.qdb");
 
         b.close();
     }
@@ -415,8 +416,8 @@ public class PersistentMessageBufferTest {
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         expect(bd.list(),
-                "0000000000002000-0000000000000000.qdb",
-                "0000000000004000-0000000000000000.qdb", "0000000000006000-0000000000000000.qdb");
+                "0000000000002000-0000000000000000-1.qdb",
+                "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
         CountingExecutor exec = new CountingExecutor();
         b.setExecutor(exec);
@@ -439,7 +440,7 @@ public class PersistentMessageBufferTest {
     @Test
     public void testSync() throws IOException {
         File bd = mkdir("sync");
-        File first = new File(bd, "0000000000000000-0000000000000000.qdb");
+        File first = new File(bd, "0000000000000000-0000000000000000-0.qdb");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         append(b, 0, "", 8192);
@@ -456,32 +457,36 @@ public class PersistentMessageBufferTest {
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertNull(b.getTimeline());
+        assertEquals(0L, b.getMessageCount());
 
         long ts = 200000;
         append(b, ts + 0, "", 8192);
+        assertEquals(1L, b.getMessageCount());
 
         Timeline t = b.getTimeline();
         assertEquals(2, t.size());
-        checkTimeline(t, 0, 1000, ts, 8192, 0, 0);
+        checkTimeline(t, 0, 1000, ts, 8192, 1, 0);
         checkTimeline(t, 1, 9192, ts, 0, 0, 0);
 
         // repeat test on newly opened buffer
         b.close();
         b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
+        assertEquals(1L, b.getMessageCount());
         t = b.getTimeline();
         assertEquals(2, t.size());
-        checkTimeline(t, 0, 1000, ts, 8192, 0, 0);
+        checkTimeline(t, 0, 1000, ts, 8192, 1, 0);
         checkTimeline(t, 1, 9192, ts, 0, 0, 0);
 
         append(b, ts + 2000, "", 2048);
         append(b, ts + 3000, "", 2048);
         append(b, ts + 4000, "", 2048);
         append(b, ts + 5000, "", 2048);
+        assertEquals(5L, b.getMessageCount());
         t = b.getTimeline();
         assertEquals(3, t.size());
-        checkTimeline(t, 0, 1000,  ts,          8192, 0, 2000);
-        checkTimeline(t, 1, 9192,  ts + 2000,   8192, 0, 3000);
+        checkTimeline(t, 0, 1000,  ts,          8192, 1, 2000);
+        checkTimeline(t, 1, 9192,  ts + 2000,   8192, 4, 3000);
         checkTimeline(t, 2, 17384, ts + 5000,   0,    0, 0);
 
         t = b.getTimeline(9192);

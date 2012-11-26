@@ -111,6 +111,10 @@ A standalone qdb-server with optional clustering support is under development. W
 Changelog
 ---------
 
+0.1.1:
+- Added getMessageCount + fixed some bugs
+- High level timeline now include message counts
+
 0.1.0:
 - Initial release
 

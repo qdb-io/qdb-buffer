@@ -85,6 +85,11 @@ public interface MessageBuffer extends Closeable {
     long getLength() throws IOException;
 
     /**
+     * How many messages are in the buffer?
+     */
+    long getMessageCount() throws IOException;
+
+    /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in
      * any loss of messages.
      */

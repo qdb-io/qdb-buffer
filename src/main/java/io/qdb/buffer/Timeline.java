@@ -51,6 +51,6 @@ public interface Timeline {
      * Return the number of messages between i and i + 1 on the timeline. Note that this will return -1 if this
      * unknown.
      */
-    long getCount(int i);
+    int getCount(int i);
 
 }
