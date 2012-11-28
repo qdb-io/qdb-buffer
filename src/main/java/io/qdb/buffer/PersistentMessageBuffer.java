@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.lang.ref.Reference;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
@@ -58,6 +59,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private int autoSyncIntervalMs = 1000;
     private Timer timer;
     private SyncTimerTask syncTask;
+
+    private Reference<MessageBuffer> shutdownRef;
 
     private static final FilenameFilter QDB_FILTER = new FilenameFilter() {
         @Override
@@ -117,6 +120,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
         } else {
             files[0] = firstMessageId;
         }
+
+        shutdownRef = ShutdownHook.get().register(this);
     }
 
     @Override
@@ -192,7 +197,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized long getLength() {
+    public synchronized long getLength() throws IOException {
+        checkOpen();
         int c = lastFile - firstFile;
         if (c == 0) return 0L;
         return  (c - 1) * MessageFile.FILE_HEADER_SIZE +
@@ -219,6 +225,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
         Cursor[] copyOfWaitingCursors;
 
         synchronized (this) {
+            checkOpen();
+
             int maxLen = getMaxPayloadSize();
             if (payloadSize > maxLen) {
                 throw new IllegalArgumentException("Payload size of " + payloadSize + " exceeds max payload size of " +
@@ -379,17 +387,34 @@ public class PersistentMessageBuffer implements MessageBuffer {
         return toFile(files[i], timestamps[i], counts[i]);
     }
 
+    private void checkOpen() throws IOException {
+        if (!isOpen()) throw new IOException(this + " has been closed");
+    }
+
+    @Override
+    public synchronized boolean isOpen() {
+        return shutdownRef != null;
+    }
+
     @Override
     public synchronized void close() throws IOException {
         if (syncTask != null) {
             syncTask.cancel();
             syncTask = null;
         }
-        if (current != null) current.close();
+        if (current != null) {
+            current.close();
+            current = null;
+        }
+        if (shutdownRef != null) {
+            ShutdownHook.get().unregister(shutdownRef);
+            shutdownRef = null;
+        }
     }
 
     @Override
     public synchronized long getNextMessageId() throws IOException {
+        checkOpen();
         if (lastFile == 0) {
             return files[lastFile];  // empty buffer
         }
@@ -399,6 +424,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized long getMessageCount() throws IOException {
+        checkOpen();
         int n = lastFile - firstFile;
         if (n == 0) return 0L;    // buffer is empty
         ensureCurrent();
@@ -409,6 +435,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized Timeline getTimeline() throws IOException {
+        checkOpen();
         int n = lastFile - firstFile;
         if (n == 0) return null;    // buffer is empty
         TopTimeline ans = new TopTimeline(n + 1);
@@ -477,6 +504,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
+    protected void finalize() throws Throwable {
+        super.finalize();
+        close();
+    }
+
+    @Override
     public MessageCursor cursor(long messageId) throws IOException {
         int i = findFileIndex(messageId);
         if (i < 0) return new EmptyCursor();
@@ -497,6 +530,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
         int i;
         synchronized (this) {
+            checkOpen();
             if (lastFile == firstFile) {
                 return -1;
             }
@@ -517,6 +551,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     public MessageCursor cursorByTimestamp(long timestamp) throws IOException {
         int i;
         synchronized (this) {
+            checkOpen();
             if (lastFile == firstFile) {
                 return new EmptyCursor();
             }
@@ -536,6 +571,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     private synchronized MessageFile getMessageFileForCursor(int i) throws IOException {
+        checkOpen();
         if (i == lastFile - 1) {
             current.use();
             return current;

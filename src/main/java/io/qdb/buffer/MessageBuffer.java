@@ -28,6 +28,11 @@ import java.util.concurrent.Executor;
 public interface MessageBuffer extends Closeable {
 
     /**
+     * Is this buffer open?
+     */
+    boolean isOpen();
+
+    /**
      * Append a message and return its id.
      */
     long append(long timestamp, String routingKey, byte[] payload) throws IOException;

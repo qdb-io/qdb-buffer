@@ -26,9 +26,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertTrue;
+import static junit.framework.Assert.*;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNull;
 
@@ -515,6 +513,30 @@ public class PersistentMessageBufferTest {
             return in.readInt();
         } finally {
             in.close();
+        }
+    }
+
+    @Test
+    public void testShutdownHook() throws IOException {
+        File bd = mkdir("shutdown-hook");
+        new PersistentMessageBuffer(bd, 1000);
+        // don't close the buffer to exercise the close code in ShutdownHook - have to look in the coverage
+        // report to see that it ran
+    }
+
+    @Test
+    public void testClose() throws IOException {
+        File bd = mkdir("close");
+        PersistentMessageBuffer mb = new PersistentMessageBuffer(bd, 1000);
+        assertTrue(mb.isOpen());
+        mb.close();
+        mb.close();  // already closed is NOP
+        assertFalse(mb.isOpen());
+        try {
+            mb.append(0L, "", new byte[0]);
+            fail();
+        } catch (IOException e) {
+            // good
         }
     }
 
