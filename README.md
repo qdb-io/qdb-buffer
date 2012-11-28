@@ -111,8 +111,10 @@ A standalone qdb-server with optional clustering support is under development. W
 Changelog
 ---------
 
-0.1.1:
-- Added getMessageCount + fixed some bugs
+0.2.0:
+- Added ShutdownHook to close open buffers on VM shutdown
+- Added isOpen to MessageBuffer
+- Added getMessageCount to MessageBuffer
 - High level timeline now include message counts
 
 0.1.0:
