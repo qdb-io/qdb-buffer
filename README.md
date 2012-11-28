@@ -113,8 +113,7 @@ Changelog
 
 0.2.0:
 - Added ShutdownHook to close open buffers on VM shutdown
-- Added isOpen to MessageBuffer
-- Added getMessageCount to MessageBuffer
+- Added isOpen, getMessageCount and getOldestMessage to MessageBuffer
 - High level timeline now include message counts
 
 0.1.0:

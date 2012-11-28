@@ -456,10 +456,12 @@ public class PersistentMessageBufferTest {
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertNull(b.getTimeline());
         assertEquals(0L, b.getMessageCount());
+        assertNull(b.getOldestMessage());
 
         long ts = 200000;
         append(b, ts + 0, "", 8192);
         assertEquals(1L, b.getMessageCount());
+        assertEquals(ts, b.getOldestMessage().getTime());
 
         Timeline t = b.getTimeline();
         assertEquals(2, t.size());
@@ -471,6 +473,7 @@ public class PersistentMessageBufferTest {
         b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(1L, b.getMessageCount());
+        assertEquals(ts, b.getOldestMessage().getTime());
         t = b.getTimeline();
         assertEquals(2, t.size());
         checkTimeline(t, 0, 1000, ts, 8192, 1, 0);

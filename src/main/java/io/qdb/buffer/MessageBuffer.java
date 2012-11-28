@@ -19,6 +19,7 @@ package io.qdb.buffer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Date;
 import java.util.Timer;
 import java.util.concurrent.Executor;
 
@@ -93,6 +94,11 @@ public interface MessageBuffer extends Closeable {
      * How many messages are in the buffer?
      */
     long getMessageCount() throws IOException;
+
+    /**
+     * What is the timestamp of the oldest message in the buffer? Returns null if the buffer is empty.
+     */
+    Date getOldestMessage() throws IOException;
 
     /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in

@@ -24,6 +24,7 @@ import java.lang.ref.Reference;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executor;
@@ -431,6 +432,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
         long ans = current.getMessageCount();
         for (int i = firstFile; i < lastFile - 1; i++) ans += counts[i];
         return ans;
+    }
+
+    @Override
+    public synchronized Date getOldestMessage() throws IOException {
+        checkOpen();
+        return lastFile == firstFile ? null : new Date(timestamps[firstFile]);
     }
 
     @Override
