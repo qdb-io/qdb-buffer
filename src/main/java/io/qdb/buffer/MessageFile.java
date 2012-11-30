@@ -287,11 +287,11 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * Close this file if no-one else is using it (see {@link #use()}).
+     * Close this file if no-one else is using it (see {@link #use()}). NOP if already closed.
      */
     public void closeIfUnused() throws IOException {
         synchronized (channel) {
-            if (--usageCounter <= 0) {
+            if (isOpen() && --usageCounter <= 0) {
                 checkpoint(true);
                 raf.close();
             }
@@ -299,14 +299,16 @@ class MessageFile implements Closeable {
     }
 
     /**
-     * Close this file even if it is in use.
+     * Close this file even if it is in use. NOP if already closed.
      */
     @Override
     public void close() throws IOException {
         synchronized (channel) {
-            --usageCounter;
-            checkpoint(true);
-            raf.close();
+            if (isOpen()) {
+                --usageCounter;
+                checkpoint(true);
+                raf.close();
+            }
         }
     }
 

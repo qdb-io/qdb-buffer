@@ -398,18 +398,28 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized void close() throws IOException {
-        if (syncTask != null) {
-            syncTask.cancel();
-            syncTask = null;
+    public void close() throws IOException {
+        Cursor[] copyOfWaitingCursors;
+        synchronized (this) {
+            if (!isOpen()) return;
+            if (syncTask != null) {
+                syncTask.cancel();
+                syncTask = null;
+            }
+            if (current != null) {
+                current.close();
+                current = null;
+            }
+            if (shutdownRef != null) {
+                ShutdownHook.get().unregister(shutdownRef);
+                shutdownRef = null;
+            }
+            copyOfWaitingCursors = waitingCursors;
         }
-        if (current != null) {
-            current.close();
-            current = null;
-        }
-        if (shutdownRef != null) {
-            ShutdownHook.get().unregister(shutdownRef);
-            shutdownRef = null;
+
+        // interrupt threads waiting for messages
+        for (Cursor c : copyOfWaitingCursors) {
+            if (c != null) c.interrupt();
         }
     }
 
@@ -620,6 +630,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         protected int fileIndex;
         protected MessageFile mf;
         protected MessageCursor c;
+        protected Thread waitingThread;
 
         public Cursor(int fileIndex, MessageFile mf, MessageCursor c) {
             this.fileIndex = fileIndex;
@@ -642,6 +653,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             boolean haveNext = false;
             addWaitingCursor(this);
             try {
+                waitingThread = Thread.currentThread();
                 if (timeoutMs <= 0) {
                     while (!(haveNext = next())) {
                         wait(timeoutMs);
@@ -655,6 +667,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 }
             } finally {
                 removeWaitingCursor(this);
+                waitingThread = null;
             }
             return haveNext;
         }
@@ -695,6 +708,11 @@ public class PersistentMessageBuffer implements MessageBuffer {
         protected void finalize() throws Throwable {
             super.finalize();
             close();
+        }
+
+        void interrupt() {
+            Thread t = waitingThread;
+            if (t != null) t.interrupt();
         }
     }
 

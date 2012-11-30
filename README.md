@@ -115,6 +115,7 @@ Changelog
 - Added ShutdownHook to close open buffers on VM shutdown
 - Added isOpen, getMessageCount and getOldestMessage to MessageBuffer
 - High level timeline now include message counts
+- Closing a MessageBuffer will now interrupt threads waiting for new messages
 
 0.1.0:
 - Initial release
