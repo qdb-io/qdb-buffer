@@ -111,6 +111,9 @@ A standalone qdb-server with optional clustering support is under development. W
 Changelog
 ---------
 
+0.3.0:
+- Renamed MessageBuffer setMaxLength, getMaxLength and getLength to setMaxSize, getMaxSize and getSize respectively
+
 0.2.0:
 - Added ShutdownHook to close open buffers on VM shutdown
 - Added isOpen, getMessageCount and getOldestMessage to MessageBuffer

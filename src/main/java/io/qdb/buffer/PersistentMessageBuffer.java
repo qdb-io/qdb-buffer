@@ -38,7 +38,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private final File dir;
 
-    private long maxLength = 100 * 1000 * 1000000L; // 100 GB
+    private long maxSize = 100 * 1000 * 1000000L; // 100 GB
     private int segmentCount = 1000;
     private int segmentLength;        // auto
     private int maxPayloadSize;     // auto
@@ -126,15 +126,15 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public void setMaxLength(long bytes) throws IOException {
-        if (bytes <= 0) throw new IllegalArgumentException("Invalid maxLength " + bytes);
-        this.maxLength = bytes;
+    public void setMaxSize(long bytes) throws IOException {
+        if (bytes <= 0) throw new IllegalArgumentException("Invalid maxSize " + bytes);
+        this.maxSize = bytes;
         cleanup();
     }
 
     @Override
-    public long getMaxLength() {
-        return maxLength;
+    public long getMaxSize() {
+        return maxSize;
     }
 
     /**
@@ -167,7 +167,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     /**
      * How big are the individual message segments? Smaller segments provide more granular timeline data but limit
      * the maximum message size and may impact performance. Use a segment size of 0 for automatic sizing based
-     * on {@link #getMaxLength()}, {@link #getSegmentCount()} and {@link #getMaxPayloadSize()}.
+     * on {@link #getMaxSize()}, {@link #getSegmentCount()} and {@link #getMaxPayloadSize()}.
      */
     public void setSegmentLength(int segmentLength) {
         this.segmentLength = segmentLength;
@@ -175,7 +175,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     public int getSegmentLength() {
         if (segmentLength > 0) return segmentLength;
-        int ans = (int)Math.min(maxLength / segmentCount, 1000 * 1000000L /*1G*/);
+        int ans = (int)Math.min(maxSize / segmentCount, 1000 * 1000000L /*1G*/);
         ans = Math.max(ans, maxPayloadSize + 2048);
         return ans;
     }
@@ -198,7 +198,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized long getLength() throws IOException {
+    public synchronized long getSize() throws IOException {
         checkOpen();
         int c = lastFile - firstFile;
         if (c == 0) return 0L;
@@ -351,7 +351,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         for (;;) {
             File doomed;
             synchronized (this) {
-                if (maxLength == 0 || getLength() <= maxLength || firstFile >= lastFile - 1) return;
+                if (maxSize == 0 || getSize() <= maxSize || firstFile >= lastFile - 1) return;
                 doomed = getFile(firstFile);
                 ++firstFile;
                 // todo what about cursors that might have doomed open?

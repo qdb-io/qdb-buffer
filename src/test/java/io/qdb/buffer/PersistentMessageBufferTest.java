@@ -47,22 +47,22 @@ public class PersistentMessageBufferTest {
         assertTrue(b.toString().contains("append"));
         b.setSegmentLength(10000 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(0, b.getFileCount());
-        assertEquals(0L, b.getLength());
+        assertEquals(0L, b.getSize());
         assertEquals(10000 + MessageFile.FILE_HEADER_SIZE, b.getSegmentLength());
 
         long ts = System.currentTimeMillis();
         assertEquals(0L, append(b, ts, "", 5000));
         assertEquals(5000L, append(b, ts, "", 5000));
         assertEquals(1, b.getFileCount());
-        assertEquals(10000L + MessageFile.FILE_HEADER_SIZE, b.getLength());
+        assertEquals(10000L + MessageFile.FILE_HEADER_SIZE, b.getSize());
 
         assertEquals(10000L, append(b, ts, "", 5000));
         assertEquals(2, b.getFileCount());
-        assertEquals(15000L + MessageFile.FILE_HEADER_SIZE * 2, b.getLength());
+        assertEquals(15000L + MessageFile.FILE_HEADER_SIZE * 2, b.getSize());
 
         assertEquals(15000L, append(b, ts, "", 5000));
         assertEquals(2, b.getFileCount());
-        assertEquals(20000L + MessageFile.FILE_HEADER_SIZE * 2, b.getLength());
+        assertEquals(20000L + MessageFile.FILE_HEADER_SIZE * 2, b.getSize());
 
         b.close();
     }
@@ -389,11 +389,11 @@ public class PersistentMessageBufferTest {
                 "0000000000000000-0000000000000000-1.qdb", "0000000000002000-0000000000000000-1.qdb",
                 "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
-        b.setMaxLength((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
+        b.setMaxSize((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
         b.cleanup();
         expect(bd.list(), "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
-        b.setMaxLength(1);  // can't get rid of last file
+        b.setMaxSize(1);  // can't get rid of last file
         b.cleanup();
         expect(bd.list(), "0000000000006000-0000000000000000-0.qdb");
 
@@ -407,8 +407,8 @@ public class PersistentMessageBufferTest {
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         int maxBufferSize = (8192 + MessageFile.FILE_HEADER_SIZE) * 3;
-        b.setMaxLength(maxBufferSize);
-        assertEquals(maxBufferSize, b.getMaxLength());
+        b.setMaxSize(maxBufferSize);
+        assertEquals(maxBufferSize, b.getMaxSize());
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
         append(b, 0, "", 8192);
