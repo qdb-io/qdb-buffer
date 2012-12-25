@@ -129,6 +129,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public void setMaxSize(long bytes) throws IOException {
+        if (this.maxSize == bytes) return;
         if (bytes <= 0) throw new IllegalArgumentException("Invalid maxSize " + bytes);
         this.maxSize = bytes;
         if (executor != null) {
