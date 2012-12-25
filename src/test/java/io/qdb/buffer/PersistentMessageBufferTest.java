@@ -71,7 +71,8 @@ public class PersistentMessageBufferTest {
     public void testFirstMessageId() throws IOException {
         File bd = mkdir("firstmsg");
 
-        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 0x1234);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(0x1234);
         long ts = 0x5678;
         assertEquals(0x1234L, append(b, ts, "", 256));
         b.close();
@@ -109,7 +110,8 @@ public class PersistentMessageBufferTest {
     public void testNextMessageId() throws IOException {
         File bd = mkdir("nextmsg");
 
-        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 0x1234);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(0x1234);
         assertEquals(0x1234L, b.getNextMessageId());
 
         long ts = System.currentTimeMillis();
@@ -146,7 +148,8 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("cursor");
         Random rnd = new Random(123);
 
-        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
 
         MessageCursor c = b.cursor(0);
@@ -292,7 +295,8 @@ public class PersistentMessageBufferTest {
     public void testCursorBlocking() throws Exception {
         File bd = mkdir("cursor-blocking");
 
-        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(1000);
 
         // thread waits for 100 ms and finishes without getting a message
         CursorThread t = new CursorThread(b, 100);
@@ -452,7 +456,8 @@ public class PersistentMessageBufferTest {
     public void testTimeline() throws IOException {
         File bd = mkdir("timeline");
 
-        PersistentMessageBuffer b = new PersistentMessageBuffer(bd, 1000);
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertNull(b.getTimeline());
         assertEquals(0L, b.getMessageCount());
@@ -522,7 +527,7 @@ public class PersistentMessageBufferTest {
     @Test
     public void testShutdownHook() throws IOException {
         File bd = mkdir("shutdown-hook");
-        new PersistentMessageBuffer(bd, 1000);
+        new PersistentMessageBuffer(bd);
         // don't close the buffer to exercise the close code in ShutdownHook - have to look in the coverage
         // report to see that it ran
     }
@@ -530,7 +535,7 @@ public class PersistentMessageBufferTest {
     @Test
     public void testClose() throws IOException {
         File bd = mkdir("close");
-        PersistentMessageBuffer mb = new PersistentMessageBuffer(bd, 1000);
+        PersistentMessageBuffer mb = new PersistentMessageBuffer(bd);
         assertTrue(mb.isOpen());
         mb.close();
         mb.close();  // already closed is NOP

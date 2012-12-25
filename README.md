@@ -113,6 +113,7 @@ Changelog
 
 0.3.0:
 - Renamed MessageBuffer setMaxLength, getMaxLength and getLength to setMaxSize, getMaxSize and getSize respectively
+- Added setFirstMessageId to MessageBuffer and removed this parameter from PersistentMessageBuffer constructor
 
 0.2.0:
 - Added ShutdownHook to close open buffers on VM shutdown

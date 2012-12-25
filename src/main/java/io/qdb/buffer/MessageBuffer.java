@@ -34,6 +34,12 @@ public interface MessageBuffer extends Closeable {
     boolean isOpen();
 
     /**
+     * What should the id of the first message appended be? Throws IllegalStateException if the buffer is not
+     * empty.
+     */
+    void setFirstMessageId(long firstMessageId) throws IOException;
+
+    /**
      * Append a message and return its id.
      */
     long append(long timestamp, String routingKey, byte[] payload) throws IOException;

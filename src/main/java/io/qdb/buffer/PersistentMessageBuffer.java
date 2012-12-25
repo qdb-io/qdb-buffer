@@ -70,14 +70,10 @@ public class PersistentMessageBuffer implements MessageBuffer {
         }
     };
 
-    public PersistentMessageBuffer(File dir) throws IOException {
-        this(dir, 0L);
-    }
-
     /**
      * Dir will be created if it does not exist. It must be writeable.
      */
-    public PersistentMessageBuffer(File dir, long firstMessageId) throws IOException {
+    public PersistentMessageBuffer(File dir) throws IOException {
         if (!dir.exists()) {
             if (!dir.mkdirs()) {
                 throw new IOException("Directory [" + dir + "] does not exist and could not be created");
@@ -118,11 +114,17 @@ public class PersistentMessageBuffer implements MessageBuffer {
             }
             lastFile = n;
             lastFileLength = (int)getFile(lastFile - 1).length();
-        } else {
-            files[0] = firstMessageId;
         }
 
         shutdownRef = ShutdownHook.get().register(this);
+    }
+
+    @Override
+    public synchronized void setFirstMessageId(long firstMessageId) throws IOException {
+        checkOpen();
+        int c = lastFile - firstFile;
+        if (c != 0) throw new IllegalStateException("Buffer is not empty");
+        files[0] = firstMessageId;
     }
 
     @Override
