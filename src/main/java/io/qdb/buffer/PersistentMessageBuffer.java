@@ -232,6 +232,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
         long id;
         Cursor[] copyOfWaitingCursors;
 
+        if (routingKey == null) routingKey = "";
+
         synchronized (this) {
             checkOpen();
 
