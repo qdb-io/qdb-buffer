@@ -41,11 +41,13 @@ public interface MessageBuffer extends Closeable {
 
     /**
      * Append a message and return its id.
+     * Throws IllegalArgumentException if the payload exceeds {@link #getMaxPayloadSize()}.
      */
     long append(long timestamp, String routingKey, byte[] payload) throws IOException;
 
     /**
      * Append a message and return its id.
+     * Throws IllegalArgumentException if the payload exceeds {@link #getMaxPayloadSize()}.
      */
     long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException;
 
