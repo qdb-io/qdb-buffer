@@ -40,8 +40,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private long maxSize = 100 * 1000 * 1000000L; // 100 GB
     private int segmentCount = 1000;
-    private int segmentLength;        // auto
-    private int maxPayloadSize;     // auto
+    private int segmentLength;                // auto
+    private int maxPayloadSize = 128 * 1024;  // auto
 
     private long[] files;           // first message ID stored in each file (from filename)
     private long[] timestamps;      // timestamp of first message stored in each file (from filename)
