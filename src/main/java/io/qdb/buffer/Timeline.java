@@ -17,7 +17,7 @@
 package io.qdb.buffer;
 
 /**
- * A point on the message timeline for a buffer.
+ * A collection of points on the message timeline for a buffer.
  */
 public interface Timeline {
 
