@@ -454,9 +454,15 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized Date getOldestMessage() throws IOException {
+    public synchronized Date getOldestMessageDate() throws IOException {
         checkOpen();
         return lastFile == firstFile ? null : new Date(timestamps[firstFile]);
+    }
+
+    @Override
+    public synchronized long getOldestMessageId() throws IOException {
+        checkOpen();
+        return lastFile == firstFile ? files[0] : files[firstFile];
     }
 
     @Override

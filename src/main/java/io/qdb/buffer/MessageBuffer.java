@@ -106,7 +106,13 @@ public interface MessageBuffer extends Closeable {
     /**
      * What is the timestamp of the oldest message in the buffer? Returns null if the buffer is empty.
      */
-    Date getOldestMessage() throws IOException;
+    Date getOldestMessageDate() throws IOException;
+
+    /**
+     * What is the id of the oldest message in the buffer? Returns {@link #setFirstMessageId(long)} if the buffer is
+     * empty or 0 if no firstMessageId has been set.
+     */
+    long getOldestMessageId() throws IOException;
 
     /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in

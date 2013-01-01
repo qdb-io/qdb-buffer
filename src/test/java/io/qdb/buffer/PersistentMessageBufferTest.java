@@ -395,6 +395,7 @@ public class PersistentMessageBufferTest {
 
         b.setMaxSize((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
         b.cleanup();
+        assertEquals(0x4000, b.getOldestMessageId());
         expect(bd.list(), "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
         b.setMaxSize(1);  // can't get rid of last file
@@ -461,12 +462,14 @@ public class PersistentMessageBufferTest {
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertNull(b.getTimeline());
         assertEquals(0L, b.getMessageCount());
-        assertNull(b.getOldestMessage());
+        assertNull(b.getOldestMessageDate());
+        assertEquals(1000L, b.getOldestMessageId());
 
         long ts = 200000;
         append(b, ts + 0, "", 8192);
         assertEquals(1L, b.getMessageCount());
-        assertEquals(ts, b.getOldestMessage().getTime());
+        assertEquals(ts, b.getOldestMessageDate().getTime());
+        assertEquals(1000L, b.getOldestMessageId());
 
         Timeline t = b.getTimeline();
         assertEquals(2, t.size());
@@ -478,7 +481,8 @@ public class PersistentMessageBufferTest {
         b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(1L, b.getMessageCount());
-        assertEquals(ts, b.getOldestMessage().getTime());
+        assertEquals(ts, b.getOldestMessageDate().getTime());
+        assertEquals(1000L, b.getOldestMessageId());
         t = b.getTimeline();
         assertEquals(2, t.size());
         checkTimeline(t, 0, 1000, ts, 8192, 1, 0);

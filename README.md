@@ -114,6 +114,8 @@ Changelog
 0.3.0:
 - Renamed MessageBuffer setMaxLength, getMaxLength and getLength to setMaxSize, getMaxSize and getSize respectively
 - Added setFirstMessageId to MessageBuffer and removed this parameter from PersistentMessageBuffer constructor
+- Renamed MessageBuffer getOldestMessage to getOldestMessageDate
+- Added MessageBuffer getOldestMessageId
 - MessageBuffer.append now treats a null routingKey as empty string
 - MessageBuffer.maxPayloadSize now defaults to 128k
 
