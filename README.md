@@ -137,8 +137,9 @@ make sure 'gradle' is on your path). Then do:
 
     $ gradle check
     $ gradle assemble
+    $ gradle install
 
-This will run the unit tests and create jars in build/libs.
+This will run the unit tests, create jars in build/libs and install them in your local maven repository.
 
 
 License
