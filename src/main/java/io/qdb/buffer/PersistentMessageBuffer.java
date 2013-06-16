@@ -604,7 +604,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private synchronized MessageFile getMessageFileForCursor(int i) throws IOException {
         checkOpen();
-        if (i == lastFile - 1) {
+        if (i == lastFile - 1 && current != null) {
             current.use();
             return current;
         } else if (i >= lastFile) {

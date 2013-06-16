@@ -207,6 +207,28 @@ public class PersistentMessageBufferTest {
         seekByTimestampCheck(b, m4);
 
         b.close();
+
+        // check seeking by timestamp works on newly opened buffer
+        b = new PersistentMessageBuffer(bd);
+        seekByTimestampCheck(b, m0);
+        b.close();
+    }
+
+    @Test
+    public void testCursorOnSingleFileBuffer() throws IOException {
+        File bd = mkdir("cursor2");
+        Random rnd = new Random(123);
+
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(1000);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
+
+        Msg m0 = appendFixedSizeMsg(b, 100, 4096, rnd);
+        b.close();
+
+        b = new PersistentMessageBuffer(bd);
+        seekByTimestampCheck(b, m0);
+        b.close();
     }
 
     private void seekByIdCheck(PersistentMessageBuffer b, Msg m) throws IOException {
