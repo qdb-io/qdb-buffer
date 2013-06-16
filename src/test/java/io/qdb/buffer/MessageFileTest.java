@@ -196,6 +196,7 @@ public class MessageFileTest {
         assertEquals(ts0, i.getTimestamp());
         assertEquals(key0, i.getRoutingKey());
         assertArrayEquals(payload0, i.getPayload());
+        assertEquals(id1, i.getNextId());
 
         assertTrue(i.next());
         assertEquals(id1, i.getId());

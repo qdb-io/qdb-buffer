@@ -64,4 +64,9 @@ public interface MessageCursor extends Closeable {
      * Get the payload of the current message.
      */
     public byte[] getPayload() throws IOException;
+
+    /**
+     * What will the id of the next message be? Note that it may not exist yet.
+     */
+    public long getNextId() throws IOException;
 }

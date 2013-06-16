@@ -693,9 +693,6 @@ class MessageFile implements Closeable {
             return buf;
         }
 
-        /**
-         * Get the ID of the next message to be read.
-         */
         public long getNextId() {
             return firstMessageId + nextPosition - FILE_HEADER_SIZE;
         }

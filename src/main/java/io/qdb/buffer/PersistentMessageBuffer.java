@@ -707,6 +707,10 @@ public class PersistentMessageBuffer implements MessageBuffer {
             return c.getPayload();
         }
 
+        public long getNextId() throws IOException {
+            return c.getNextId();
+        }
+
         public synchronized void close() throws IOException {
             if (c != null) {
                 c.close();
