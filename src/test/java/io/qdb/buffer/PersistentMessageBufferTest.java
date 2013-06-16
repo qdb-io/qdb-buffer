@@ -215,7 +215,7 @@ public class PersistentMessageBufferTest {
     }
 
     @Test
-    public void testCursorOnSingleFileBuffer() throws IOException {
+    public void testCursorOnSingleFileBufferNPE() throws IOException {
         File bd = mkdir("cursor2");
         Random rnd = new Random(123);
 
@@ -228,6 +228,25 @@ public class PersistentMessageBufferTest {
 
         b = new PersistentMessageBuffer(bd);
         seekByTimestampCheck(b, m0);
+        b.close();
+    }
+
+    @Test
+    public void testCursorToEndOnSingleFileBufferNPE() throws IOException {
+        File bd = mkdir("cursor3");
+        Random rnd = new Random(123);
+
+        PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
+        b.setFirstMessageId(1000);
+        b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
+        appendFixedSizeMsg(b, 100, 4096, rnd);
+        b.close();
+
+        b = new PersistentMessageBuffer(bd);
+        MessageCursor c = b.cursorByTimestamp(0);
+        assertTrue(c.next());
+        assertFalse(c.next());
+        c.close();
         b.close();
     }
 

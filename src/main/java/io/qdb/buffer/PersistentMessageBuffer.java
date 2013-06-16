@@ -636,8 +636,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
         }
     }
 
-    private synchronized MessageFile getCurrent() {
-        return current;
+    private synchronized boolean isCurrentFile(int fileIndex) {
+        return fileIndex == lastFile - 1;
     }
 
     private class Cursor implements MessageCursor {
@@ -657,7 +657,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         public synchronized boolean next() throws IOException {
             if (c == null) throw new IOException("Cursor has been closed");
             if (c.next()) return true;
-            if (mf == getCurrent()) return false;
+            if (isCurrentFile(fileIndex)) return false;
             close();
             mf = getMessageFileForCursor(++fileIndex);
             c = mf.cursor(mf.getFirstMessageId());
