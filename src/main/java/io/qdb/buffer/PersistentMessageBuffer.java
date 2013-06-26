@@ -60,8 +60,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private int autoSyncIntervalMs = 1000;
     private Timer timer;
     private SyncTimerTask syncTask;
-
-    private Reference<MessageBuffer> shutdownRef;
+    private boolean open;
 
     private static final FilenameFilter QDB_FILTER = new FilenameFilter() {
         @Override
@@ -116,7 +115,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
             lastFileLength = (int)getFile(lastFile - 1).length();
         }
 
-        shutdownRef = ShutdownHook.get().register(this);
+        open = true;
     }
 
     @Override
@@ -403,7 +402,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     @Override
     public synchronized boolean isOpen() {
-        return shutdownRef != null;
+        return open;
     }
 
     @Override
@@ -419,10 +418,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 current.close();
                 current = null;
             }
-            if (shutdownRef != null) {
-                ShutdownHook.get().unregister(shutdownRef);
-                shutdownRef = null;
-            }
+            open = false;
             copyOfWaitingCursors = waitingCursors;
         }
 

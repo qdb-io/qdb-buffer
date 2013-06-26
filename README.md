@@ -103,13 +103,12 @@ most writes are simple appends. Old messages are deleted by simply deleting mess
 Messages are not buffered in memory and written to disk sometime later. They go to disk right away. The memory
 footprint is independent of the number of messages in the buffer.
 
-### What about clustering?
-
-A standalone qdb-server with optional clustering support is under development. Watch this space.
-
 
 Changelog
 ---------
+
+0.3.2:
+- Got rid of shutdown hook
 
 0.3.1:
 - Added MessageCursor.getNextId()
