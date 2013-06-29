@@ -182,7 +182,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     public int getSegmentLength() {
         if (segmentLength > 0) return segmentLength;
         int ans = (int)Math.min(maxSize / segmentCount, 1000 * 1000000L /*1G*/);
-        ans = Math.max(ans, maxPayloadSize + 2048);
+        ans = Math.max(ans, maxPayloadSize + 8192);
         return ans;
     }
 
