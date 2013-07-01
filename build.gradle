@@ -14,6 +14,9 @@ dependencies {
     testCompile 'junit:junit:4.10'
 }
 
+project.sourceCompatibility = "1.6"
+project.targetCompatibility = "1.6"
+
 task sourceJar(type: Jar) {
     classifier = 'sources'
     from sourceSets.main.allSource
