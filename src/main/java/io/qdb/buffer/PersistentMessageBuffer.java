@@ -653,9 +653,11 @@ public class PersistentMessageBuffer implements MessageBuffer {
         public synchronized boolean next() throws IOException {
             if (c == null) throw new IOException("Cursor has been closed");
             if (c.next()) return true;
-            if (isCurrentFile(fileIndex)) return false;
-            close();
-            mf = getMessageFileForCursor(++fileIndex);
+            synchronized (PersistentMessageBuffer.this) {
+                if (isCurrentFile(fileIndex)) return false;
+                close();
+                mf = getMessageFileForCursor(++fileIndex);
+            }
             c = mf.cursor(mf.getFirstMessageId());
             return c.next();
         }
