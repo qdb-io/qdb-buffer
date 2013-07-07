@@ -20,7 +20,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.lang.ref.Reference;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
@@ -46,8 +45,9 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private long[] files;           // first message ID stored in each file (from filename)
     private long[] timestamps;      // timestamp of first message stored in each file (from filename)
     private int[] counts;           // number of messages stored in each file (from filename)
-    private int firstFile;          // index of first entry in files in use
-    private int lastFile;           // index of last entry in files in use + 1
+    private int fileOffset;         // actual indexing into files, timestamps and counts must always add this offset
+    private int firstFile;          // index of first entry in files in use (relative to fileOffset)
+    private int lastFile;           // index of last entry in files in use + 1 (relative to fileOffset)
 
     private MessageFile current;    // file we are currently appending to
     private int lastFileLength;     // only used if current is null
@@ -208,8 +208,9 @@ public class PersistentMessageBuffer implements MessageBuffer {
         checkOpen();
         int c = lastFile - firstFile;
         if (c == 0) return 0L;
-        return  (c - 1) * MessageFile.FILE_HEADER_SIZE +
-                files[lastFile - 1] - files[firstFile] + (current == null ? lastFileLength : current.length());
+        return  (c - 1) * MessageFile.FILE_HEADER_SIZE
+                + files[lastFile - 1 - fileOffset] - files[firstFile - fileOffset]
+                + (current == null ? lastFileLength : current.length());
     }
 
     /**
@@ -256,19 +257,19 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
                 // rename current to match number of messages it contains
                 int count = current.getMessageCount();
-                File newName = toFile(files[lastFile - 1], timestamps[lastFile - 1], count);
+                File newName = toFile(files[lastFile - 1 - fileOffset], timestamps[lastFile - 1 - fileOffset], count);
                 if (!current.getFile().renameTo(newName)) {
                     throw new IOException("Unable to rename [" + current.getFile().getAbsolutePath() + "] to [" +
                             newName.getAbsolutePath() + "]");
                 }
-                counts[lastFile - 1] = count;
+                counts[lastFile - 1 - fileOffset] = count;
 
                 long firstMessageId = current.getNextMessageId();
                 current.closeIfUnused();
 
                 current = new MessageFile(toFile(firstMessageId, timestamp, 0), firstMessageId, getSegmentLength());
-                timestamps[lastFile] = timestamp;
-                files[lastFile++] = firstMessageId;
+                timestamps[lastFile - fileOffset] = timestamp;
+                files[lastFile++ - fileOffset] = firstMessageId;
                 id = current.append(timestamp, routingKey, payload, payloadSize);
                 if (id < 0) {   // this shouldn't happen
                     throw new IllegalArgumentException("Message is too long?");
@@ -307,8 +308,9 @@ public class PersistentMessageBuffer implements MessageBuffer {
 
     private void ensureCurrent() throws IOException {
         if (current == null) {
-            long firstMessageId = files[lastFile - 1];
-            current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1], counts[lastFile - 1]), firstMessageId);
+            long firstMessageId = files[lastFile - 1 - fileOffset];
+            current = new MessageFile(toFile(firstMessageId, timestamps[lastFile - 1 - fileOffset],
+                    counts[lastFile - 1 - fileOffset]), firstMessageId);
         }
     }
 
@@ -316,24 +318,23 @@ public class PersistentMessageBuffer implements MessageBuffer {
      * Make sure there is space for one more entry in the files array.
      */
     private void ensureSpaceInFiles() {
-        if (lastFile < files.length) return;
+        if (lastFile - fileOffset < files.length) return;
         int n = lastFile - firstFile;
         int n2 = n + 512;
 
         long[] a = new long[n2];
-        System.arraycopy(files, firstFile, a, 0, n);
+        System.arraycopy(files, firstFile - fileOffset, a, 0, n);
         files = a;
 
         a = new long[n2];
-        System.arraycopy(timestamps, firstFile, a, 0, n);
+        System.arraycopy(timestamps, firstFile - fileOffset, a, 0, n);
         timestamps = a;
 
         int[] b = new int[n2];
-        System.arraycopy(counts, firstFile, b, 0, n);
+        System.arraycopy(counts, firstFile - fileOffset, b, 0, n);
         counts = b;
 
-        lastFile -= firstFile;
-        firstFile = 0;
+        fileOffset = firstFile;
     }
 
     @Override
@@ -393,7 +394,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         if (i < firstFile || i >= lastFile) {
             throw new IllegalArgumentException("Index " + i + " out of range (" + firstFile + " to " + (lastFile - 1) + ")");
         }
-        return toFile(files[i], timestamps[i], counts[i]);
+        return toFile(files[i - fileOffset], timestamps[i - fileOffset], counts[i - fileOffset]);
     }
 
     private void checkOpen() throws IOException {
@@ -431,9 +432,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     @Override
     public synchronized long getNextMessageId() throws IOException {
         checkOpen();
-        if (lastFile == 0) {
-            return files[lastFile];  // empty buffer
-        }
+        if (lastFile == 0) return files[0];  // empty buffer
         ensureCurrent();
         return current.getNextMessageId();
     }
@@ -445,20 +444,20 @@ public class PersistentMessageBuffer implements MessageBuffer {
         if (n == 0) return 0L;    // buffer is empty
         ensureCurrent();
         long ans = current.getMessageCount();
-        for (int i = firstFile; i < lastFile - 1; i++) ans += counts[i];
+        for (int i = firstFile; i < lastFile - 1; i++) ans += counts[i - fileOffset];
         return ans;
     }
 
     @Override
     public synchronized Date getOldestMessageDate() throws IOException {
         checkOpen();
-        return lastFile == firstFile ? null : new Date(timestamps[firstFile]);
+        return lastFile == firstFile ? null : new Date(timestamps[firstFile - fileOffset]);
     }
 
     @Override
     public synchronized long getOldestMessageId() throws IOException {
         checkOpen();
-        return lastFile == firstFile ? files[0] : files[firstFile];
+        return lastFile == firstFile ? files[fileOffset] : files[firstFile - fileOffset];
     }
 
     @Override
@@ -467,9 +466,9 @@ public class PersistentMessageBuffer implements MessageBuffer {
         int n = lastFile - firstFile;
         if (n == 0) return null;    // buffer is empty
         TopTimeline ans = new TopTimeline(n + 1);
-        System.arraycopy(this.files, firstFile, ans.files, 0, n);
-        System.arraycopy(this.timestamps, firstFile, ans.timestamps, 0, n);
-        System.arraycopy(this.counts, firstFile, ans.counts, 0, n - 1);
+        System.arraycopy(this.files, firstFile - fileOffset, ans.files, 0, n);
+        System.arraycopy(this.timestamps, firstFile - fileOffset, ans.timestamps, 0, n);
+        System.arraycopy(this.counts, firstFile - fileOffset, ans.counts, 0, n - 1);
         ensureCurrent();
         ans.files[n] = current.getNextMessageId();
         long mrt = current.getMostRecentTimestamp();
@@ -538,7 +537,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public MessageCursor cursor(long messageId) throws IOException {
+    public synchronized MessageCursor cursor(long messageId) throws IOException {
         int i = findFileIndex(messageId);
         if (i < 0) return new EmptyCursor();
         MessageFile mf = getMessageFileForCursor(i);
@@ -562,37 +561,36 @@ public class PersistentMessageBuffer implements MessageBuffer {
             if (lastFile == firstFile) {
                 return -1;
             }
-            long firstMessageId = files[firstFile];
+            long firstMessageId = files[firstFile - fileOffset];
             if (messageId < firstMessageId) {
                 messageId = firstMessageId;
             }
 
-            i = Arrays.binarySearch(files, firstFile, lastFile, messageId);
+            i = Arrays.binarySearch(files, firstFile - fileOffset, lastFile - fileOffset, messageId);
             if (i < 0) {
                 i = -(i + 2); // return position before the insertion index if we didn't get a match
             }
+            i += fileOffset;
         }
         return i;
     }
 
     @Override
-    public MessageCursor cursorByTimestamp(long timestamp) throws IOException {
-        int i;
-        synchronized (this) {
-            checkOpen();
-            if (lastFile == firstFile) {
-                return new EmptyCursor();
-            }
-            long firstTimestamp = timestamps[firstFile];
-            if (timestamp < firstTimestamp) {
-                timestamp = firstTimestamp;
-            }
-
-            i = Arrays.binarySearch(timestamps, firstFile, lastFile, timestamp);
-            if (i < 0) {
-                i = -(i + 2); // return position before the insertion index if we didn't get a match
-            }
+    public synchronized MessageCursor cursorByTimestamp(long timestamp) throws IOException {
+        checkOpen();
+        if (lastFile == firstFile) {
+            return new EmptyCursor();
         }
+        long firstTimestamp = timestamps[firstFile - fileOffset];
+        if (timestamp < firstTimestamp) {
+            timestamp = firstTimestamp;
+        }
+
+        int i = Arrays.binarySearch(timestamps, firstFile - fileOffset, lastFile - fileOffset, timestamp);
+        if (i < 0) {
+            i = -(i + 2); // return position before the insertion index if we didn't get a match
+        }
+        i += fileOffset;
 
         MessageFile mf = getMessageFileForCursor(i);
         return new Cursor(i, mf, mf.cursorByTimestamp(timestamp));
@@ -606,7 +604,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         } else if (i >= lastFile) {
             return null;
         }
-        return new MessageFile(getFile(i), files[i]);
+        return new MessageFile(getFile(i), files[i - fileOffset]);
     }
 
     private synchronized void addWaitingCursor(Cursor c) {
@@ -657,6 +655,10 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 if (isCurrentFile(fileIndex)) return false;
                 close();
                 mf = getMessageFileForCursor(++fileIndex);
+                if (mf == null) {
+                    throw new NullPointerException("mf null fileIndex " + fileIndex + " firstFile " + firstFile +
+                            " lastFile " + lastFile + " files.length " + files.length + " fileOffset " + fileOffset);
+                }
             }
             c = mf.cursor(mf.getFirstMessageId());
             return c.next();

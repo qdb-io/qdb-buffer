@@ -107,6 +107,9 @@ footprint is independent of the number of messages in the buffer.
 Changelog
 ---------
 
+0.3.3:
+- Fixed rare NPE cursoring over buffer being appended to
+
 0.3.2:
 - Got rid of shutdown hook
 
