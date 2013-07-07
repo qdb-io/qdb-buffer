@@ -655,10 +655,6 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 if (isCurrentFile(fileIndex)) return false;
                 close();
                 mf = getMessageFileForCursor(++fileIndex);
-                if (mf == null) {
-                    throw new NullPointerException("mf null fileIndex " + fileIndex + " firstFile " + firstFile +
-                            " lastFile " + lastFile + " files.length " + files.length + " fileOffset " + fileOffset);
-                }
             }
             c = mf.cursor(mf.getFirstMessageId());
             return c.next();
