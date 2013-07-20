@@ -72,7 +72,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("firstmsg");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(0x1234);
+        b.setFirstId(0x1234);
         long ts = 0x5678;
         assertEquals(0x1234L, append(b, ts, "", 256));
         b.close();
@@ -111,16 +111,16 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("nextmsg");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(0x1234);
-        assertEquals(0x1234L, b.getNextMessageId());
+        b.setFirstId(0x1234);
+        assertEquals(0x1234L, b.getNextId());
 
         long ts = System.currentTimeMillis();
         append(b, ts, "", 256);
-        assertEquals(0x1334L, b.getNextMessageId());
+        assertEquals(0x1334L, b.getNextId());
         b.close();
 
         b = new PersistentMessageBuffer(bd);
-        assertEquals(0x1334L, b.getNextMessageId());
+        assertEquals(0x1334L, b.getNextId());
         b.close();
     }
 
@@ -149,7 +149,7 @@ public class PersistentMessageBufferTest {
         Random rnd = new Random(123);
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(1000);
+        b.setFirstId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
 
         MessageCursor c = b.cursor(0);
@@ -220,7 +220,7 @@ public class PersistentMessageBufferTest {
         Random rnd = new Random(123);
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(1000);
+        b.setFirstId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
 
         Msg m0 = appendFixedSizeMsg(b, 100, 4096, rnd);
@@ -237,7 +237,7 @@ public class PersistentMessageBufferTest {
         Random rnd = new Random(123);
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(1000);
+        b.setFirstId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         appendFixedSizeMsg(b, 100, 4096, rnd);
         b.close();
@@ -337,7 +337,7 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("cursor-blocking");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(1000);
+        b.setFirstId(1000);
 
         // thread waits for 100 ms and finishes without getting a message
         CursorThread t = new CursorThread(b, 100);
@@ -436,7 +436,7 @@ public class PersistentMessageBufferTest {
 
         b.setMaxSize((8192 + MessageFile.FILE_HEADER_SIZE) * 2);
         b.cleanup();
-        assertEquals(0x4000, b.getOldestMessageId());
+        assertEquals(0x4000, b.getOldestId());
         expect(bd.list(), "0000000000004000-0000000000000000-1.qdb", "0000000000006000-0000000000000000-0.qdb");
 
         b.setMaxSize(1);  // can't get rid of last file
@@ -499,20 +499,22 @@ public class PersistentMessageBufferTest {
         File bd = mkdir("timeline");
 
         PersistentMessageBuffer b = new PersistentMessageBuffer(bd);
-        b.setFirstMessageId(1000);
+        b.setFirstId(1000);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertTrue(b.isEmpty());
         assertNull(b.getTimeline());
+        assertNull(b.getMostRecentTimestamp());
         assertEquals(0L, b.getMessageCount());
-        assertNull(b.getOldestMessageDate());
-        assertEquals(1000L, b.getOldestMessageId());
+        assertNull(b.getOldestTimestamp());
+        assertEquals(1000L, b.getOldestId());
 
         long ts = 200000;
         append(b, ts + 0, "", 8192);
         assertFalse(b.isEmpty());
         assertEquals(1L, b.getMessageCount());
-        assertEquals(ts, b.getOldestMessageDate().getTime());
-        assertEquals(1000L, b.getOldestMessageId());
+        assertEquals(ts, b.getOldestTimestamp().getTime());
+        assertEquals(ts, b.getMostRecentTimestamp().getTime());
+        assertEquals(1000L, b.getOldestId());
 
         Timeline t = b.getTimeline();
         assertEquals(2, t.size());
@@ -524,8 +526,9 @@ public class PersistentMessageBufferTest {
         b = new PersistentMessageBuffer(bd);
         b.setSegmentLength(8192 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(1L, b.getMessageCount());
-        assertEquals(ts, b.getOldestMessageDate().getTime());
-        assertEquals(1000L, b.getOldestMessageId());
+        assertEquals(ts, b.getOldestTimestamp().getTime());
+        assertEquals(ts, b.getMostRecentTimestamp().getTime());
+        assertEquals(1000L, b.getOldestId());
         t = b.getTimeline();
         assertEquals(2, t.size());
         checkTimeline(t, 0, 1000, ts, 8192, 1, 0);
@@ -536,6 +539,8 @@ public class PersistentMessageBufferTest {
         append(b, ts + 4000, "", 2048);
         append(b, ts + 5000, "", 2048);
         assertEquals(5L, b.getMessageCount());
+        assertEquals(ts, b.getOldestTimestamp().getTime());
+        assertEquals(ts + 5000, b.getMostRecentTimestamp().getTime());
         t = b.getTimeline();
         assertEquals(3, t.size());
         checkTimeline(t, 0, 1000,  ts,          8192, 1, 2000);

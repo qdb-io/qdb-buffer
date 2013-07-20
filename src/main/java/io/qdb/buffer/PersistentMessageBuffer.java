@@ -119,7 +119,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized void setFirstMessageId(long firstMessageId) throws IOException {
+    public synchronized void setFirstId(long firstMessageId) throws IOException {
         checkOpen();
         int c = lastFile - firstFile;
         if (c != 0) throw new IllegalStateException("Buffer is not empty");
@@ -436,7 +436,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized long getNextMessageId() throws IOException {
+    public synchronized long getNextId() throws IOException {
         checkOpen();
         if (lastFile == 0) return files[0];  // empty buffer
         ensureCurrent();
@@ -455,15 +455,23 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
-    public synchronized Date getOldestMessageDate() throws IOException {
+    public synchronized Date getOldestTimestamp() throws IOException {
         checkOpen();
         return lastFile == firstFile ? null : new Date(timestamps[firstFile - fileOffset]);
     }
 
     @Override
-    public synchronized long getOldestMessageId() throws IOException {
+    public synchronized long getOldestId() throws IOException {
         checkOpen();
         return lastFile == firstFile ? files[fileOffset] : files[firstFile - fileOffset];
+    }
+
+    public synchronized Date getMostRecentTimestamp() throws IOException {
+        checkOpen();
+        int n = lastFile - firstFile;
+        if (n == 0) return null;    // buffer is empty
+        ensureCurrent();
+        return new Date(current.getMostRecentTimestamp());
     }
 
     @Override
@@ -556,7 +564,7 @@ public class PersistentMessageBuffer implements MessageBuffer {
         if (messageId < 0) {
             throw new IllegalArgumentException("Invalid messageId " + messageId + ", " + this);
         }
-        long next = getNextMessageId();
+        long next = getNextId();
         if (messageId > next) {
             throw new IllegalArgumentException("messageId " + messageId + " past end of buffer " + next + ", " + this);
         }

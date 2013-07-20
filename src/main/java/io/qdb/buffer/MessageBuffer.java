@@ -37,7 +37,7 @@ public interface MessageBuffer extends Closeable {
      * What should the id of the first message appended be? Throws IllegalStateException if the buffer is not
      * empty.
      */
-    void setFirstMessageId(long firstMessageId) throws IOException;
+    void setFirstId(long firstMessageId) throws IOException;
 
     /**
      * Append a message and return its id.
@@ -54,12 +54,12 @@ public interface MessageBuffer extends Closeable {
     /**
      * What ID will the next message appended have?
      */
-    long getNextMessageId() throws IOException;
+    long getNextId() throws IOException;
 
     /**
      * Create a cursor reading the next message with id greater than or equal to messageId onwards (i.e. messageId
      * can be 'between' messages). To read the oldest message use 0 as the message ID. To read the newest use
-     * {@link #getNextMessageId()}. If the messageId is before the oldest message the the cursor reads from the
+     * {@link #getNextId()}. If the messageId is before the oldest message the the cursor reads from the
      * oldest message onwards. The cursor should only be used from one thread at a time i.e. it is not thread safe.
      */
     MessageCursor cursor(long messageId) throws IOException;
@@ -111,13 +111,18 @@ public interface MessageBuffer extends Closeable {
     /**
      * What is the timestamp of the oldest message in the buffer? Returns null if the buffer is empty.
      */
-    Date getOldestMessageDate() throws IOException;
+    Date getOldestTimestamp() throws IOException;
 
     /**
-     * What is the id of the oldest message in the buffer? Returns {@link #setFirstMessageId(long)} if the buffer is
+     * What is the id of the oldest message in the buffer? Returns {@link #setFirstId(long)} if the buffer is
      * empty or 0 if no firstMessageId has been set.
      */
-    long getOldestMessageId() throws IOException;
+    long getOldestId() throws IOException;
+
+    /**
+     * What is the timestamp of the newest message in the buffer? Returns null if the buffer is empty.
+     */
+    public Date getMostRecentTimestamp() throws IOException;
 
     /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in
