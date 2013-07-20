@@ -94,6 +94,11 @@ public interface MessageBuffer extends Closeable {
     int getMaxPayloadSize();
 
     /**
+     * Is this buffer empty?
+     */
+    boolean isEmpty() throws IOException;
+
+    /**
      * How much space is this buffer currently consuming in bytes?
      */
     long getSize() throws IOException;

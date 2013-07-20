@@ -204,6 +204,12 @@ public class PersistentMessageBuffer implements MessageBuffer {
     }
 
     @Override
+    public synchronized boolean isEmpty() throws IOException {
+        checkOpen();
+        return lastFile - firstFile == 0;
+    }
+
+    @Override
     public synchronized long getSize() throws IOException {
         checkOpen();
         int c = lastFile - firstFile;
