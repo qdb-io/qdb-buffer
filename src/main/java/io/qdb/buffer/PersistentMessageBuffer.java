@@ -16,10 +16,7 @@
 
 package io.qdb.buffer;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
+import java.io.*;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
@@ -341,6 +338,11 @@ public class PersistentMessageBuffer implements MessageBuffer {
         counts = b;
 
         fileOffset = firstFile;
+    }
+
+    @Override
+    public int getMessageSize(String routingKey, int payloadSize) {
+        return MessageFile.getMessageSize(routingKey, payloadSize);
     }
 
     @Override

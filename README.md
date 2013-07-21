@@ -110,6 +110,7 @@ Changelog
 0.4.0:
 - Added isEmpty and getMostRecentTimestamp
 - Renamed some methods in MessageBuffer removing superflous "Message" in the names
+- Added getMessageSize
 
 0.3.3:
 - Fixed rare NPE cursoring over buffer being appended to

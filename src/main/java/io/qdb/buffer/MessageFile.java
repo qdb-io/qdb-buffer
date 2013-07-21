@@ -249,6 +249,17 @@ class MessageFile implements Closeable {
     }
 
     /**
+     * How many bytes will the message take up in the file including headers?
+     */
+    public static int getMessageSize(String routingKey, int payloadSize) {
+        try {
+            return (routingKey == null ? 0 : routingKey.getBytes("UTF8").length) + payloadSize + MESSAGE_HEADER_SIZE;
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);  // not possible really
+        }
+    }
+
+    /**
      * How big is this file in bytes? Note that this is the total length of the file including the header.
      */
     public int length() {

@@ -52,6 +52,11 @@ public interface MessageBuffer extends Closeable {
     long append(long timestamp, String routingKey, ReadableByteChannel payload, int payloadSize) throws IOException;
 
     /**
+     * How much space will the message consume in the buffer including header overhead?
+     */
+    int getMessageSize(String routingKey, int payloadSize);
+
+    /**
      * What ID will the next message appended have?
      */
     long getNextId() throws IOException;
