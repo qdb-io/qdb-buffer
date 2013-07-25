@@ -45,6 +45,7 @@ public class PersistentMessageBufferTest {
     public void testAppend() throws IOException {
         PersistentMessageBuffer b = new PersistentMessageBuffer(mkdir("append"));
         assertTrue(b.toString().contains("append"));
+        assertTrue(b.getCreationTime() >= System.currentTimeMillis());
         b.setSegmentLength(10000 + MessageFile.FILE_HEADER_SIZE);
         assertEquals(0, b.getFileCount());
         assertEquals(0L, b.getSize());

@@ -127,7 +127,13 @@ public interface MessageBuffer extends Closeable {
     /**
      * What is the timestamp of the newest message in the buffer? Returns null if the buffer is empty.
      */
-    public Date getMostRecentTimestamp() throws IOException;
+    Date getMostRecentTimestamp() throws IOException;
+
+    /**
+     * When was this buffer instance created? Note that this is when this instance was created in this
+     * virtual machine and has no relationship to when the actual disk files were created.
+     */
+    long getCreationTime();
 
     /**
      * Sync all changes to persistent storage. A system crash immediately following this call will not result in

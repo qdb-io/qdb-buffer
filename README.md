@@ -107,6 +107,10 @@ footprint is independent of the number of messages in the buffer.
 Changelog
 ---------
 
+0.4.1:
+- Added getCreationTime
+- Added caching for getMostRecentTimestamp for better performance
+
 0.4.0:
 - Added isEmpty and getMostRecentTimestamp
 - Renamed some methods in MessageBuffer removing superflous "Message" in the names

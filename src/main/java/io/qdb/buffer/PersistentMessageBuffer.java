@@ -49,6 +49,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private MessageFile current;    // file we are currently appending to
     private int lastFileLength;     // only used if current is null
 
+    private long mostRecentTimestamp;
+
     private Cursor[] waitingCursors = new Cursor[1];
 
     private Executor executor;
@@ -58,6 +60,8 @@ public class PersistentMessageBuffer implements MessageBuffer {
     private Timer timer;
     private SyncTimerTask syncTask;
     private boolean open;
+
+    private final long creationTime = System.currentTimeMillis();
 
     private static final FilenameFilter QDB_FILTER = new FilenameFilter() {
         @Override
@@ -277,11 +281,15 @@ public class PersistentMessageBuffer implements MessageBuffer {
                 if (id < 0) {   // this shouldn't happen
                     throw new IllegalArgumentException("Message is too long?");
                 }
+                mostRecentTimestamp = timestamp;
+
                 if (executor != null) {
                     executor.execute(cleanupJob);
                 } else {
                     cleanup();
                 }
+            } else {
+                mostRecentTimestamp = timestamp;
             }
 
             copyOfWaitingCursors = waitingCursors;
@@ -473,7 +481,13 @@ public class PersistentMessageBuffer implements MessageBuffer {
         int n = lastFile - firstFile;
         if (n == 0) return null;    // buffer is empty
         ensureCurrent();
-        return new Date(current.getMostRecentTimestamp());
+        if (mostRecentTimestamp == 0) mostRecentTimestamp = current.getMostRecentTimestamp();
+        return new Date(mostRecentTimestamp);
+    }
+
+    @Override
+    public long getCreationTime() {
+        return creationTime;
     }
 
     @Override
