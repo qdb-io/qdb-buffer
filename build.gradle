@@ -4,7 +4,7 @@ apply plugin: 'signing'
 apply from: file("etc/emma.gradle")
 
 group = 'io.qdb'
-version = '0.4.1-SNAPSHOT'
+version = '0.4.1'
 
 repositories {
     mavenCentral()
@@ -33,6 +33,7 @@ artifacts {
 }
 
 signing {
+    required = false
     sign configurations.archives
 }
 
